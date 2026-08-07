@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#d81b57" />
+  <meta name="description" content="หน้าติดตามสถานะคิว ชุติมา FRESH LAUNDRY" />
+  <title>ติดตามสถานะคิว · ชุติมา FRESH LAUNDRY</title>
+  <link rel="icon" type="image/svg+xml" href="./assets/logo.svg" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="preview-notice" role="note" data-config-notice hidden>
+    <span>⚙</span>
+    <div><strong>เว็บไซต์ยังไม่ได้ตั้งค่า</strong><small>กรุณาติดต่อผู้ดูแลระบบ</small></div>
+  </div>
+
+  <header class="site-header">
+    <div class="brand">
+      <img src="./assets/logo.svg" alt="โลโก้ชุติมา FRESH LAUNDRY" />
+      <div>
+        <strong>ชุติมา FRESH LAUNDRY</strong>
+        <span>ระบบรับฝากซัก–อบ 24 ชั่วโมง</span>
+      </div>
+    </div>
+    <div class="live-pill"><i></i><span>ข้อมูลออนไลน์</span></div>
+  </header>
+
+  <main class="page-shell">
+    <section class="queue-heading" aria-labelledby="queueTitle">
+      <div>
+        <span class="eyebrow">สถานะคิวของคุณ</span>
+        <h1 id="queueTitle">คิว <span data-queue-number>028</span></h1>
+        <p>รับผ้าเมื่อ <span data-created-time>16:18 น.</span> · <span data-basket-count>3 ตะกร้า</span></p>
+      </div>
+      <button class="refresh-button" type="button" data-refresh aria-label="ตรวจสอบข้อมูลล่าสุด">
+        <span>↻</span> อัปเดต
+      </button>
+    </section>
+
+    <nav class="progress-steps" aria-label="ขั้นตอนของคิว" data-progress></nav>
+
+    <section class="status-hero" data-status-hero aria-live="polite">
+      <div class="status-symbol" data-status-symbol></div>
+      <div class="status-copy">
+        <span class="status-kicker" data-status-kicker></span>
+        <h2 data-status-title></h2>
+        <p data-status-description></p>
+      </div>
+    </section>
+
+    <section class="pickup-card" data-pickup-card>
+      <div class="pickup-icon">🕒</div>
+      <div>
+        <span data-pickup-label>เวลาที่แนะนำให้มารับ</span>
+        <strong data-pickup-time>ประมาณ 18:10 น.</strong>
+        <small data-pickup-note>เผื่อเวลาตรวจและจัดผ้าหลังเครื่องทำงานเสร็จ</small>
+      </div>
+    </section>
+
+    <section class="section-card">
+      <header class="section-title">
+        <div>
+          <span>🧺</span>
+          <div><h2>สถานะแต่ละตะกร้า</h2><p>อัปเดตตามการทำงานจริงของร้าน</p></div>
+        </div>
+        <span class="count-chip" data-basket-summary>2/3 กำลังดำเนินการ</span>
+      </header>
+      <div class="basket-list" data-basket-list></div>
+    </section>
+
+    <section class="privacy-card">
+      <div class="privacy-icon">🔒</div>
+      <div><strong>ลิงก์นี้ไม่แสดงข้อมูลส่วนตัว</strong><p>ไม่มีชื่อ เบอร์โทร หรือข้อมูลการชำระเงิน ใช้สำหรับดูสถานะคิวนี้เท่านั้น</p></div>
+    </section>
+
+    <section class="contact-actions" aria-label="ติดต่อร้าน">
+      <a data-phone-action><span>☎</span><div><strong>โทรหาร้าน</strong><small>สอบถามสถานะเพิ่มเติม</small></div></a>
+      <a data-map-action target="_blank" rel="noopener noreferrer"><span>⌖</span><div><strong>แผนที่ร้าน</strong><small>เปิดเส้นทางไปรับผ้า</small></div></a>
+    </section>
+
+    <p class="last-update">อัปเดตล่าสุด <strong data-last-update>เมื่อสักครู่</strong></p>
+  </main>
+
+  <div class="toast" role="status" aria-live="polite" data-toast></div>
+  <script src="./config.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
