@@ -1,0 +1,1 @@
+# chutima-laundry-status
