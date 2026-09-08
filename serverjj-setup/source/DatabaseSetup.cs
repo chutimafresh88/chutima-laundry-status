@@ -26,6 +26,8 @@ class ChutimaDatabaseSetup : Form
     const string ServiceAccount = @"NT SERVICE\ChutimaPostgreSQL";
     const string ArchiveHash = "59F8CE701C63C2ED623C665A5E51B3EF6F2E37CCF837B68FFEED0742D0AE6ABD";
     const string ArchiveUrl = "https://get.enterprisedb.com/postgresql/postgresql-18.6-3-windows-x64-binaries.zip";
+    const string RuntimeHash = "843068991DAAA1F73AD9F6239BCE4D0F6A07A51F18C37EA2A867E9BECA71295C";
+    const string RuntimeUrl = "https://download.visualstudio.microsoft.com/download/pr/ebdab8e5-1d7b-4d9f-a11b-cbb1720c3b12/843068991DAAA1F73AD9F6239BCE4D0F6A07A51F18C37EA2A867E9BECA71295C/VC_redist.x64.exe";
     readonly TextBox log = new TextBox { Multiline=true, ReadOnly=true, ScrollBars=ScrollBars.Vertical, Dock=DockStyle.Fill };
     readonly Button install = new Button { Text="สร้างฐานข้อมูลชุติมาบน SERVERJJ", Dock=DockStyle.Bottom, Height=54 };
     readonly ProgressBar progress = new ProgressBar { Dock=DockStyle.Bottom, Height=20 };
@@ -45,7 +47,7 @@ class ChutimaDatabaseSetup : Form
     }
     ChutimaDatabaseSetup()
     {
-        Text="ชุติมา • เตรียมฐานข้อมูล SERVERJJ"; ClientSize=new Size(800,560); MinimumSize=Size;
+        Text="ชุติมา • เตรียมฐานข้อมูล SERVERJJ • แก้ Runtime R3"; ClientSize=new Size(800,560); MinimumSize=Size;
         Font=new Font("Tahoma",11); StartPosition=FormStartPosition.CenterScreen;
         Controls.Add(log); Controls.Add(progress); Controls.Add(install);
         Append("สร้าง PostgreSQL 18 แยกสำหรับร้านชุติมา");
@@ -95,17 +97,48 @@ class ChutimaDatabaseSetup : Form
             return result;
         }
     }
-    async Task Download(string archive)
+    async Task Download(string archive,string url=ArchiveUrl)
     {
         ServicePointManager.SecurityProtocol=SecurityProtocolType.Tls12;
         using(var client=new HttpClient()){client.Timeout=TimeSpan.FromMinutes(20);
-            using(var response=await client.GetAsync(ArchiveUrl,HttpCompletionOption.ResponseHeadersRead))
+            using(var response=await client.GetAsync(url,HttpCompletionOption.ResponseHeadersRead))
             {
                 response.EnsureSuccessStatusCode();long total=response.Content.Headers.ContentLength??0,read=0;
                 using(var source=await response.Content.ReadAsStreamAsync())using(var target=new FileStream(archive,FileMode.CreateNew,FileAccess.Write,FileShare.None))
                 {var buffer=new byte[131072];int count;while((count=await source.ReadAsync(buffer,0,buffer.Length))>0){await target.WriteAsync(buffer,0,count);read+=count;if(total>0)progress.Value=(int)Math.Min(100,read*100/total);}target.Flush(true);}
             }
         }
+    }
+    static string HashFile(string path)
+    {
+        using(var sha=SHA256.Create())using(var file=File.OpenRead(path))return BitConverter.ToString(sha.ComputeHash(file)).Replace("-","");
+    }
+    async Task PrepareRuntime(string cache)
+    {
+        Step("เตรียม Visual C++ จาก Microsoft เฉพาะในโฟลเดอร์ชุติมา (ไม่ติดตั้งส่วนกลาง)");
+        var package=Path.Combine(cache,"vc-redist-14.51.2026.exe");
+        if(!File.Exists(package))await Download(package,RuntimeUrl);
+        if(HashFile(package)!=RuntimeHash)throw new Exception("ชุด Visual C++ ไม่ตรงกับต้นฉบับ Microsoft");
+        // This pinned Microsoft Burn bundle contains the payload CAB at this
+        // verified offset. Only extract files; never execute the redistributable.
+        var unpack=Path.Combine(cache,"runtime-r3");Directory.CreateDirectory(unpack);
+        var payload=Path.Combine(unpack,"payload.cab");
+        var bytes=File.ReadAllBytes(package);
+        const int offset=630000,length=18091661;
+        if(bytes.Length!=18731856||Encoding.ASCII.GetString(bytes,offset,4)!="MSCF"||BitConverter.ToInt32(bytes,offset+8)!=length)throw new Exception("โครงสร้างชุด Visual C++ ไม่ตรงกับรุ่นที่เตรียมไว้");
+        using(var file=new FileStream(payload,FileMode.Create,FileAccess.Write,FileShare.None)){file.Write(bytes,offset,length);file.Flush(true);}
+        var expand=Path.Combine(Environment.SystemDirectory,"expand.exe");
+        await Run(expand,"-F:a4 "+Quote(payload)+" "+Quote(unpack));
+        var dlls=Path.Combine(unpack,"x64");Directory.CreateDirectory(dlls);
+        await Run(expand,"-F:*.dll_amd64 "+Quote(Path.Combine(unpack,"a4"))+" "+Quote(dlls));
+        var names=new[]{"concrt140.dll","msvcp140.dll","msvcp140_1.dll","msvcp140_2.dll","msvcp140_atomic_wait.dll","msvcp140_codecvt_ids.dll","vcamp140.dll","vccorlib140.dll","vcomp140.dll","vcruntime140.dll","vcruntime140_1.dll","vcruntime140_threads.dll"};
+        foreach(var name in names){
+            var source=Path.Combine(dlls,name+"_amd64");var destination=Path.Combine(bin,name);
+            if(!File.Exists(source))throw new Exception("ชุด Visual C++ ไม่ครบ: "+name);
+            if(File.Exists(destination)&&HashFile(destination)!=HashFile(source))throw new Exception("พบ Runtime ชุติมาคนละรุ่น ต้องตรวจก่อนแทนที่: "+name);
+        }
+        foreach(var name in names){var destination=Path.Combine(bin,name);if(!File.Exists(destination))File.Copy(Path.Combine(dlls,name+"_amd64"),destination);}
+        Append("Visual C++ เฉพาะชุติมา: "+FileVersionInfo.GetVersionInfo(Path.Combine(bin,"msvcp140.dll")).FileVersion);
     }
     async Task Install()
     {
@@ -126,6 +159,7 @@ class ChutimaDatabaseSetup : Form
         using(var sha=SHA256.Create())using(var file=File.OpenRead(archive))if(BitConverter.ToString(sha.ComputeHash(file)).Replace("-","")!=ArchiveHash)throw new Exception("ไฟล์ติดตั้งไม่ตรงกับต้นฉบับ หยุดเพื่อป้องกันการติดตั้งผิดไฟล์");
         if(!Directory.Exists(Path.Combine(Root,"PostgreSQL18"))){Step("แยกไฟล์โปรแกรมไว้ใน C:\\ChutimaServer\\PostgreSQL18");await Task.Run(()=>ZipFile.ExtractToDirectory(archive,Path.Combine(Root,"PostgreSQL18")));}
         else {Step("ใช้ไฟล์ PostgreSQL ที่ดาวน์โหลดและตรวจต้นฉบับไว้แล้ว");if(!File.Exists(Path.Combine(bin,"initdb.exe")))throw new Exception("ไฟล์โปรแกรม PostgreSQL เดิมไม่ครบ");}
+        await PrepareRuntime(cache);
         var admin=Secret();var owner=Secret();var adminFile=Path.Combine(Data,@"Admin\cluster-admin.json");
         if(File.Exists(adminFile)){
             var saved=json.Deserialize<Dictionary<string,object>>(File.ReadAllText(adminFile));
