@@ -35,6 +35,7 @@ class ChutimaDatabaseSetup : Form
     string config = Path.Combine(Data,"Config");
     string bin = Path.Combine(Root,@"PostgreSQL18\pgsql\bin");
     JavaScriptSerializer json = new JavaScriptSerializer();
+    readonly List<string> sensitive = new List<string>();
 
     [STAThread]
     static void Main()
@@ -85,8 +86,12 @@ class ChutimaDatabaseSetup : Form
             if(input!=null)await process.StandardInput.WriteAsync(input);process.StandardInput.Close();
             bool ended=await Task.Run(()=>process.WaitForExit(180000));
             if(!ended){try{process.Kill();}catch{}throw new Exception("ขั้นตอนนี้ใช้เวลานานเกินกำหนด กรุณาตรวจสถานะก่อนลองใหม่");}
-            var result=await output;await errors;
-            if(process.ExitCode!=0&&!allowFailure)throw new Exception(Path.GetFileName(exe)+" ทำงานไม่สำเร็จ ("+process.ExitCode+")");
+            var result=await output;var detail=await errors;
+            if(process.ExitCode!=0&&!allowFailure){
+                var message=result+"\r\n"+detail;foreach(var secret in sensitive)message=message.Replace(secret,"[hidden]");
+                if(message.Length>6000)message=message.Substring(message.Length-6000);
+                throw new Exception(Path.GetFileName(exe)+" ทำงานไม่สำเร็จ ("+process.ExitCode+")\r\n"+message);
+            }
             return result;
         }
     }
@@ -108,7 +113,7 @@ class ChutimaDatabaseSetup : Form
         if(!new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator))throw new Exception("กรุณาเปิดชุดติดตั้งด้วยสิทธิ์ผู้ดูแล Windows");
         if(!Directory.Exists(@"E:\"))throw new Exception("ไม่พบไดรฟ์ E: สำหรับข้อมูลชุติมา");
         if(IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners().Any(p=>p.Port==5433))throw new Exception("พอร์ต 5433 มีการใช้งานอยู่ ต้องตรวจสอบก่อนติดตั้ง");
-        if(Directory.Exists(cluster)||Directory.Exists(Path.Combine(Root,"PostgreSQL18")))throw new Exception("พบโฟลเดอร์ฐานข้อมูลชุติมาเดิม ต้องตรวจข้อมูลก่อนติดตั้งต่อ");
+        if(Directory.Exists(cluster)&&Directory.EnumerateFileSystemEntries(cluster).Any())throw new Exception("โฟลเดอร์ชุติมามีไฟล์ฐานข้อมูลอยู่แล้ว ต้องตรวจการสร้างครั้งก่อนก่อนทำต่อ");
         if(File.Exists(Path.Combine(config,"database.json")))throw new Exception("พบการตั้งค่าชุติมาเดิม จะไม่สร้างทับ");
         var ownService=await Run(Path.Combine(Environment.SystemDirectory,"sc.exe"),"query "+Service,null,null,true);
         if(ownService.Contains("SERVICE_NAME"))throw new Exception("พบบริการ ChutimaPostgreSQL เดิม กรุณาตรวจการติดตั้งก่อน");
@@ -119,10 +124,15 @@ class ChutimaDatabaseSetup : Form
         Step("ดาวน์โหลด PostgreSQL 18.6 สำหรับฐานข้อมูลชุติมา");
         if(!File.Exists(archive))await Download(archive);
         using(var sha=SHA256.Create())using(var file=File.OpenRead(archive))if(BitConverter.ToString(sha.ComputeHash(file)).Replace("-","")!=ArchiveHash)throw new Exception("ไฟล์ติดตั้งไม่ตรงกับต้นฉบับ หยุดเพื่อป้องกันการติดตั้งผิดไฟล์");
-        Step("แยกไฟล์โปรแกรมไว้ใน C:\\ChutimaServer\\PostgreSQL18");
-        await Task.Run(()=>ZipFile.ExtractToDirectory(archive,Path.Combine(Root,"PostgreSQL18")));
+        if(!Directory.Exists(Path.Combine(Root,"PostgreSQL18"))){Step("แยกไฟล์โปรแกรมไว้ใน C:\\ChutimaServer\\PostgreSQL18");await Task.Run(()=>ZipFile.ExtractToDirectory(archive,Path.Combine(Root,"PostgreSQL18")));}
+        else {Step("ใช้ไฟล์ PostgreSQL ที่ดาวน์โหลดและตรวจต้นฉบับไว้แล้ว");if(!File.Exists(Path.Combine(bin,"initdb.exe")))throw new Exception("ไฟล์โปรแกรม PostgreSQL เดิมไม่ครบ");}
         var admin=Secret();var owner=Secret();var adminFile=Path.Combine(Data,@"Admin\cluster-admin.json");
-        File.WriteAllText(adminFile,json.Serialize(new{host="127.0.0.1",port=5433,user="chutima_admin",password=admin}),new UTF8Encoding(false));
+        if(File.Exists(adminFile)){
+            var saved=json.Deserialize<Dictionary<string,object>>(File.ReadAllText(adminFile));
+            if(Convert.ToString(saved["host"])!="127.0.0.1"||Convert.ToInt32(saved["port"])!=5433||Convert.ToString(saved["user"])!="chutima_admin")throw new Exception("ข้อมูลเริ่มต้นไม่ใช่ฐานข้อมูลชุติมาชุดนี้");
+            admin=Convert.ToString(saved["password"]);if(admin.Length!=64||admin.Any(c=>!Uri.IsHexDigit(c)))throw new Exception("ข้อมูลเริ่มต้นชุติมาไม่ครบ");
+        }else File.WriteAllText(adminFile,json.Serialize(new{host="127.0.0.1",port=5433,user="chutima_admin",password=admin}),new UTF8Encoding(false));
+        sensitive.Add(admin);sensitive.Add(owner);
         var passwordFile=Path.Combine(Data,@"Admin\initialization.secret");File.WriteAllText(passwordFile,admin,new UTF8Encoding(false));
         Step("สร้างพื้นที่ฐานข้อมูล PostgreSQL ใหม่ของชุติมา");
         PrivateDirectory(cluster);

@@ -1,15 +1,13 @@
 # Chutima SERVERJJ database setup
 
-Dedicated database installer for SERVERJJ only. This is the database preparation stage, not a POS release or a completed migration.
+Dedicated installer for SERVERJJ. This stage prepares the new PostgreSQL database; it does not import business data or modify any other application's databases/services.
 
-- PostgreSQL 18.6, loopback port 5433, database `chutima`
-- Windows service `ChutimaPostgreSQL`, virtual account `NT SERVICE\ChutimaPostgreSQL`
-- Program `C:\ChutimaServer`; database `E:\ChutimaData\PostgreSQL18`
-- Generates new database credentials on the target server, stores them with private Windows folder permissions, and never displays them.
-- Refuses existing Chutima cluster/service/credentials or an occupied 5433 port. Does not open or modify any other application's database, services, or backups.
-- Windows administrator consent is required. No password is embedded in this file.
-- No production business data is included or automatically imported.
+PostgreSQL 18.6, loopback port 5433, service `ChutimaPostgreSQL`, virtual account `NT SERVICE\ChutimaPostgreSQL`. Program files: `C:\ChutimaServer`. Database: `E:\ChutimaData\PostgreSQL18`.
 
-Installer SHA256: `2848A3E1DAFB9A3810A14640D830B8337EE753A1073E34936F6DA85F69E5A83D`
+The installer generates database credentials locally and keeps them in private Windows folders. No shop credentials or business data are embedded. Administrator consent is required.
 
-PostgreSQL is downloaded from the official EDB binaries URL with SHA256 verification. Source and schema are included in `source/`.
+This revision reuses the verified downloaded runtime after an initialization failure, preserves the generated administrative connection, refuses a nonempty existing cluster, and displays errors with generated secrets removed. No automatic deletion/rollback of existing data is performed.
+
+SHA256: `4F50B654AC31FDB269EF1E31E26ACA8C1AC588136C9061AA5AF8944AB3C34E9A`
+
+Source and schema are in `source/`.
