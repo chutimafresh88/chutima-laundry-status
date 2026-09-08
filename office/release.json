@@ -1,14 +1,1 @@
-{
-  "source_commit": "2045818fef8a8c0c5a2d47e163d09ebca58b53a6",
-  "files": {
-    "index.html": "2d0a3fad75687b2284967e325d5201016b7978eeec01a5572c5c328e8cc73f21",
-    "app.js": "68dc9c19ac737914e4c2c8e0b54e5e2dcadf1018336f722cc9badbefa34d356c",
-    "app.css": "8d0c5e8c87c54a25935439e31be73435582381912b6ffb2f9cb31134a2a22986",
-    "app.js.LEGAL.txt": "8d572e3710a0b05d03566faede9a8a1ac3227b058c03b514e515f260499cade5",
-    "logo.jpg": "40e65c16e7ad55efbc0452f9ff10d0702ecfe94809797cdbaa6d5482b0153f99",
-    "favicon.svg": "e6d2e59b7b5bbb0342e0fb496dfc262decbfe4426bbb7b047aec8d467d1dc6f7",
-    "SETUP.md": "594c2aa3e56f859a36629645c5b3c0d698135506c2205753c66643404d155214",
-    "setup-inventory.sql": "9158f89846113f6239d83315bb8283c402073670c64db2daf0264c58bfcfdb0b",
-    "grant-owner.sql": "3db6063de93d9a7644a18054cf51d9cdab89d30c05ead3ff5cfd28a50a975e37"
-  }
-}
+{"version":"serverjj-0.16.1","source":"SERVERJJ when activated; legacy fallback while preparing","posVersion":"0.16.1","builtAt":"2026-09-08","tests":"14 office API checks; central schema isolation and relay authentication checks passed"}
