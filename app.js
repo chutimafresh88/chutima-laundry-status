@@ -169,10 +169,10 @@ function renderError(kind) {
   elements.createdTime.textContent = '—';
   elements.basketCount.textContent = '—';
   elements.hero.className = 'status-hero cancelled';
-  elements.symbol.textContent = configMissing ? '⚙' : '!';
-  elements.kicker.textContent = configMissing ? 'เว็บไซต์ยังไม่พร้อมใช้งาน' : 'ไม่พบข้อมูลคิว';
-  elements.title.textContent = configMissing ? 'ยังไม่ได้ตั้งค่า Supabase' : 'ลิงก์ไม่ถูกต้องหรือหมดอายุแล้ว';
-  elements.description.textContent = configMissing ? 'กรุณาให้ผู้ดูแลระบบตั้งค่าเว็บไซต์ก่อนเปิดใช้งาน' : 'ตรวจสอบ QR อีกครั้ง หรือติดต่อร้านเพื่อสอบถามสถานะ';
+  elements.symbol.textContent = '!';
+  elements.kicker.textContent = configMissing ? 'ระบบติดตามสถานะยังไม่พร้อมใช้งาน' : 'ไม่พบข้อมูลคิว';
+  elements.title.textContent = configMissing ? 'ขออภัย ไม่สามารถตรวจสอบสถานะได้' : 'ลิงก์ไม่ถูกต้องหรือหมดอายุแล้ว';
+  elements.description.textContent = configMissing ? 'กรุณาลองใหม่อีกครั้ง หรือติดต่อร้าน โทร. 064-150-1155' : 'ตรวจสอบ QR อีกครั้ง หรือติดต่อร้านเพื่อสอบถามสถานะ';
   elements.progress.innerHTML = renderProgress(-1, true);
   elements.basketList.innerHTML = '';
   elements.basketSummary.textContent = 'ไม่มีข้อมูล';
