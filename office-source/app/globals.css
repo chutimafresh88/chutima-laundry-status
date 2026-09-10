@@ -177,7 +177,7 @@ h1 {font-size:30px;font-weight:700;line-height:1.4}
 .viewer {font-size:13px;padding:0 14px 20px;color:#7b8297;overflow-wrap:anywhere}
 @media(max-width:760px){.office-main{padding:20px 16px}.office-top{padding:0 16px;height:64px}.stock-metrics{grid-template-columns:1fr;gap:10px}.stock-metrics>div{display:flex;align-items:center;justify-content:space-between;padding:14px 20px}.stock-metrics strong{margin:0;font-size:24px}.table-toolbar{flex-wrap:wrap;padding:16px}.page-heading h1{font-size:26px}.sync-pill{font-size:12px;padding:7px 10px}.office-card th{padding:0 16px}}
 
-.purchase-dialog{font-family:Tahoma,Arial,sans-serif!important;max-width:1080px!important;gap:16px!important;overflow:hidden!important}
+.office-dialog.purchase-dialog{font-family:Tahoma,Arial,sans-serif!important;max-width:1080px!important;gap:16px!important;overflow:hidden!important}
 .purchase-dialog .form-scroll{padding:2px 8px 2px 2px;max-height:62vh}
 .purchase-dialog .form-help{font-size:13px;color:#667085;margin:16px 0 10px}
 .purchase-pack-card{margin:0 0 12px;padding:16px 18px 0;border:1px solid #e3e7ee;border-radius:12px;background:#fff}
