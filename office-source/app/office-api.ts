@@ -46,7 +46,7 @@ export function draftKey(){return member?'chutima-office-draft:'+member.shop_id+
 export function currentRole(){return member?.role||'';}
 export function canWrite(){return ['owner','manager'].includes(currentRole());}
 export function canSeeCost(){return ['owner','manager','reports'].includes(currentRole());}
-export function allowedSection(id:string){const role=currentRole();return role==='owner'||role==='manager'&&!['staff','settings'].includes(id)||role==='reports'&&['dashboard','products','reports','history'].includes(id)||role==='stock'&&id==='products';}
+export function allowedSection(id:string){const role=currentRole();return role==='owner'||role==='manager'&&id!=='staff'||role==='reports'&&['dashboard','products','reports','history','settings'].includes(id)||role==='stock'&&id==='products';}
 async function staffCall<T>(body:Record<string,unknown>){return request<T>('/functions/v1/office-staff',{method:'POST',body:JSON.stringify(body)});}
 export async function listStaff(){return (await staffCall<{users:StaffUser[]}>({action:'list'})).users;}
 export async function createStaff(input:{username:string;displayName:string;role:StaffRole;password:string}){return staffCall({action:'create',...input});}
