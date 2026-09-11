@@ -1,6 +1,6 @@
 import type {ShopSettings} from './office-settings';
 import type {TaxMode} from './document-totals';
-type DocFields={shopSnapshot?:ShopSettings;taxMode?:TaxMode;taxRate?:number;taxAmount?:number;taxableAmount?:number;subtotal?:number;discount?:number;shipping?:number;notes?:string};
+type DocFields={updatedAt?:string;shopSnapshot?:ShopSettings;taxMode?:TaxMode;taxRate?:number;taxAmount?:number;taxableAmount?:number;subtotal?:number;discount?:number;shipping?:number;notes?:string};
 export type ReportPage={requestId:string;kind:string;from:string;to:string;generatedAt:string;hash:string;offset:number;totalRows:number;rows:Record<string,string|number|null>[];hasMore:boolean;note:string};
 export type PurchaseOrder=DocFields&{id:string;orderNo:string;supplierId:string;supplierName:string;items:{productId:string;name:string;sku:string;quantity:number;received:number;unitCost:number;packCount?:number;piecesPerPack?:number;packCost?:number}[];status:'OPEN'|'PARTIAL'|'RECEIVED'|'CANCELLED';revision:number;total:number;notes:string;expectedDate:string;createdAt:string};
 import { defaultPublishableKey } from './cloud-config';
