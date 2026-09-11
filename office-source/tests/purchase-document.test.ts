@@ -7,7 +7,7 @@ const order:any={id:'o1',orderNo:'PO-20260911-001',supplierId:'s1',supplierName:
 const receipt:any={...order,purchaseNo:'GR-20260911-001',supplierSnapshot:{name:supplier.name},documentNo:'INV-001',paidAmount:100,balance:380};delete receipt.supplierName;
 const logo='data:image/jpeg;base64,'+fs.readFileSync('work/chutima-backoffice/public/logo.jpg').toString('base64');
 fs.mkdirSync('outputs/purchase-print',{recursive:true});
-for(const [name,doc] of [['order',order],['receipt',receipt],['multipage',{...order,items:Array.from({length:21},(_,i)=>({...order.items[i%3],name:'สินค้าทดสอบ '+(i+1)}))}]] as const){const html=purchaseDocumentHtml(doc,shop,supplier,logo);assert.ok(html.includes(supplier.taxId));assert.ok(html.includes(supplier.address));assert.ok(!html.includes('undefined'));fs.writeFileSync('outputs/purchase-print/'+name+'.html',html);}
+for(const [name,doc] of [['order',order],['receipt',receipt],['multipage',{...order,items:Array.from({length:24},(_,i)=>({...order.items[i%3],name:'สินค้าทดสอบ '+(i+1)}))}]] as const){const html=purchaseDocumentHtml(doc,shop,supplier,logo);assert.ok(html.includes(supplier.taxId));assert.ok(html.includes(supplier.address));assert.ok(!html.includes('undefined'));fs.writeFileSync('outputs/purchase-print/'+name+'.html',html);}
 const historical=purchaseDocumentHtml({...order,supplierSnapshot:{taxId:'9999999999999',address:'ที่อยู่เดิม'}},shop,supplier);
 assert.ok(historical.includes('9999999999999'));assert.ok(!historical.includes(supplier.taxId));
 assert.ok(purchaseDocumentHtml({...order,notes:'<script>bad</script>'},shop,supplier).includes('&lt;script&gt;'));
