@@ -32,3 +32,5 @@ console.log('Staff authorization: stock cost redaction, role boundaries, disable
 
 for (const password of ['1234','12345']) { const f=fixture('owner'); assert.equal((await f.call({action:'create',username:'staff2',displayName:'Test',role:'stock',password})).status,400); assert.equal(f.writes.length,0); }
 assert.equal((await fixture('owner').call({action:'create',username:'staff2',displayName:'Test',role:'stock',password:'abc123'})).status,200);
+
+assert.equal((await fixture('manager').call({action:'submit',id:generation,type:'purchase.receive',payload:{workflow:'office.settings',settings:{name:'test'}}})).status,403);

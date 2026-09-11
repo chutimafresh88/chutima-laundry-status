@@ -33,6 +33,7 @@ export function createHandler({env,fetchImpl=fetch}){return async req=>{
    await admin('/rest/v1/office_staff?shop_id=eq.'+shop+'&user_id=eq.'+target.user_id,'PATCH',{role:input.role,active:input.active,updated_at:new Date().toISOString()});return reply(200,{updated:true});
   }
   if(input.action==='submit'){
+   if(input.payload?.workflow==='office.settings'&&role!=='owner')throw failure(403,'เฉพาะเจ้าของร้านเท่านั้น');
    const {id,type,payload}=input;if(!uuid(id)||!payload||typeof payload!=='object'||Array.isArray(payload))throw failure(400,'รายการไม่ถูกต้อง');
    const manager=role==='owner'||role==='manager',report=role==='reports'&&type==='purchase.receive'&&payload.workflow==='report.prepare';
    if(!(manager&&['product.save','supplier.save','stock.receive','stock.count','purchase.receive'].includes(type)||report))throw failure(403,'ไม่มีสิทธิ์บันทึกรายการนี้');
@@ -45,7 +46,7 @@ export function createHandler({env,fetchImpl=fetch}){return async req=>{
    for(const [collection,count] of Object.entries(c.manifest))if(records.filter(r=>r.collection===collection).length!==Number(count))throw failure(503,'ข้อมูลยังไม่ครบ กรุณาลองใหม่');
    const list=name=>records.filter(r=>r.collection===name).map(r=>r.body),meta=list('meta')[0]||{};let products=list('products');
    if(role==='stock'){const fields=['id','name','sku','barcode','packBarcode','packSize','category','unit','price','stockOnHand','lowStockAt','enabled','trackStock','image','updatedAt','allocations'];products=products.map(p=>Object.fromEntries(fields.map(k=>[k,p[k]??null])));}
-   const snapshot={dashboard:role==='stock'?undefined:meta.dashboard,schema:1,revision:c.revision,products,categories:meta.categories||[],suppliers:role==='stock'?[]:list('suppliers'),purchases:role==='stock'?[]:list('purchases'),movements:role==='stock'?[]:list('movements'),purchaseWorkflowVersion:meta.purchaseWorkflowVersion||0,purchaseOrders:role==='stock'?[]:list('purchaseOrders'),reportPages:role==='stock'?[]:list('reportPages'),reportVersion:meta.reportVersion||0,reportPage:role==='stock'?null:meta.reportPage||null};
+   const snapshot={officeSettings:role==='stock'?undefined:meta.officeSettings,dashboard:role==='stock'?undefined:meta.dashboard,schema:1,revision:c.revision,products,categories:meta.categories||[],suppliers:role==='stock'?[]:list('suppliers'),purchases:role==='stock'?[]:list('purchases'),movements:role==='stock'?[]:list('movements'),purchaseWorkflowVersion:meta.purchaseWorkflowVersion||0,purchaseOrders:role==='stock'?[]:list('purchaseOrders'),reportPages:role==='stock'?[]:list('reportPages'),reportVersion:meta.reportVersion||0,reportPage:role==='stock'?null:meta.reportPage||null};
    const requests=role==='stock'?[]:await admin('/rest/v1/inventory_central_requests?shop_id=eq.'+shop+'&created_by=eq.'+user.id+'&select=id,type,payload,status,message,created_at,completed_at&order=created_at.desc&limit=1000');
    return reply(200,{role,displayName:staff?.display_name||user.email,snapshot,snapshotAt:c.synced_at,requests,source:'serverjj',devices:c.device_status||[]});
   }
