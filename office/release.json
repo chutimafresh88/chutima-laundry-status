@@ -1,1 +1,1 @@
-{"version":"serverjj-0.16.1","source":"SERVERJJ when activated; legacy fallback while preparing","posVersion":"0.16.1","builtAt":"2026-09-08","tests":"14 office API checks; central schema isolation and relay authentication checks passed"}
+{"version": "0.17.0", "serverVersion": "0.17.0", "features": ["purchasing", "barcode-receiving", "reports-xlsx", "average-cost", "staff-user-password"], "installer": "../serverjj-updates/0.17.0/Chutima-Server-Update-0.17.0.exe"}

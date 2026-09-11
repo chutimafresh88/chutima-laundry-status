@@ -1,0 +1,82 @@
+'use client';
+import {useRef,useState,useEffect} from 'react';
+import {printDocument} from './print-document';
+import Settlement from './purchase-settlement';
+import {Button} from '@/components/ui/button';
+import {Input} from '@/components/ui/input';
+import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription,DialogFooter} from '@/components/ui/dialog';
+import type {OfficeData,PurchaseOrder,Product,Purchase} from './office-api';
+import * as api from './office-api';
+import {calculatePack,previewPack,newPackLine,type PackLine} from './purchase-packs';
+const money=(n:number)=>new Intl.NumberFormat('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n);
+const statuses={OPEN:'รอรับสินค้า',PARTIAL:'รับบางส่วน',RECEIVED:'รับครบแล้ว',CANCELLED:'ปิดยอดค้าง'};
+type Form={mode:'direct'|'order'|'receive'|'cancel';order?:PurchaseOrder;supplierId:string;lines:PackLine[];notes:string;expectedDate:string;documentNo:string;discount:string;shipping:string;paidAmount:string;paymentMethod:string;dueDate:string};
+export default function Purchasing({data,refresh,onReceipt}:{data:OfficeData;refresh:()=>void;onReceipt:(p:Purchase)=>void}){
+ const [settlement,setSettlement]=useState<{purchase:Purchase;mode:'pay'|'return'}|null>(null);
+ const [tab,setTab]=useState('orders'),[form,setForm]=useState<Form|null>(null),[scan,setScan]=useState(''),[search,setSearch]=useState(''),[message,setMessage]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+ const lock=useRef(false),attempt=useRef<{fingerprint:string;id:string}|null>(null),scanInput=useRef<HTMLInputElement>(null);
+ const [savedDraft,setSavedDraft]=useState<{form:Form;attempt:typeof attempt.current}|null>(null);
+ useEffect(()=>{try{const key=api.draftKey(),raw=key&&sessionStorage.getItem(key);if(raw){const saved=JSON.parse(raw);if(saved.form&&['direct','order','receive','cancel'].includes(saved.form.mode)&&Array.isArray(saved.form.lines))setSavedDraft(saved);}}catch{}},[]);
+ useEffect(()=>{if(!form)return;try{const key=api.draftKey();if(key)sessionStorage.setItem(key,JSON.stringify({form,attempt:attempt.current}));}catch{}},[form]);
+ const snapshot=data.snapshot,products=snapshot?.products||[],orders=snapshot?.purchaseOrders||[],receipts=snapshot?.purchases||[],supported=Number(snapshot?.purchaseWorkflowVersion)>=1;
+ const pending=(id:string)=>data.requests.some(r=>r.status==='pending'&&(r.payload.orderId===id||r.payload.purchaseId===id));
+ const open=(mode:Form['mode'],order?:PurchaseOrder)=>{setError('');setMessage('');setScan('');attempt.current=null;setForm({mode,order,supplierId:order?.supplierId||'',lines:order?order.items.filter(i=>i.received<i.quantity).map(i=>({productId:i.productId,packCount:'0',piecesPerPack:'1',packCost:String(i.unitCost)})):[newPackLine()],notes:'',expectedDate:'',documentNo:'',discount:'0',shipping:'0',paidAmount:'0',paymentMethod:'credit',dueDate:''});};
+ const update=(key:keyof Form,value:string)=>setForm(f=>f?{...f,[key]:value}:f);
+ const row=(index:number,line:PackLine)=>setForm(f=>f?{...f,lines:f.lines.map((v,i)=>i===index?line:v)}:f);
+ function scanBarcode(){
+  if(!form||busy||!scan.trim())return;const code=scan.trim();const matches=products.flatMap(p=>[...(p.barcode===code?[{p,count:1,pack:false}]:[]),...(p.packBarcode===code?[{p,count:Number(p.packSize),pack:true}]:[])]);
+  if(matches.length!==1){setError(matches.length?'บาร์โค้ดซ้ำ กรุณาแก้ข้อมูลสินค้า':'ไม่พบบาร์โค้ดนี้ กรุณาตั้งบาร์โค้ดชิ้น / แพ็กในข้อมูลสินค้าก่อน');setScan('');scanInput.current?.focus();return;}
+  const {p,count,pack}=matches[0];if(p.enabled===false||!Number.isSafeInteger(count)||count<1){setError('สินค้าไม่เปิดใช้งานหรือจำนวนชิ้นต่อแพ็กไม่ถูกต้อง');return;}
+  const index=form.lines.findIndex(l=>l.productId===p.id),existing=index>=0?form.lines[index]:null;
+  const current=existing?Number(existing.packCount)*Number(existing.piecesPerPack):0;
+  const ordered=form.order?.items.find(i=>i.productId===p.id);
+  if(form.order&&(!ordered||current+count>ordered.quantity-ordered.received)){setError('สินค้าไม่มีในใบสั่งซื้อ หรือจำนวนเกินยอดค้างรับ');setScan('');return;}
+  const cost=existing&&existing.packCost!==''?Number(existing.packCost)/Number(existing.piecesPerPack):ordered?.unitCost??p.costPrice;
+  const line=!existing||current===0?{productId:p.id,packCount:'1',piecesPerPack:String(count),packCost:String(Number((cost*count).toFixed(6)))}:Number(existing.piecesPerPack)===count?{...existing,packCount:String(Number(existing.packCount)+1)}:{productId:p.id,packCount:String(current+count),piecesPerPack:'1',packCost:String(cost)};
+  const lines=index>=0?form.lines.map((l,i)=>i===index?line:l):[...form.lines.filter(l=>l.productId),line];
+  setForm({...form,lines});setScan('');setError('');setMessage(`เพิ่ม ${p.name} ${pack?'1 แพ็ก ('+count+' ชิ้น)':'1 ชิ้น'} ในรายการแล้ว`);scanInput.current?.focus();
+ }
+ async function save(){if(!form||lock.current)return;lock.current=true;setBusy(true);setError('');try{
+  if(form.mode!=='direct'&&!supported)throw Error('ต้องอัปเดตระบบจัดซื้อบน SERVERJJ ก่อน');
+  let payload:Record<string,unknown>;
+  if(form.mode==='cancel'){if(!form.notes.trim())throw Error('กรุณาระบุเหตุผลปิดยอดค้าง');payload={workflow:'order.cancel',orderId:form.order!.id,expectedOrderRevision:form.order!.revision,reason:form.notes};}
+  else{
+   if(!form.supplierId)throw Error('กรุณาเลือกผู้จำหน่าย');
+   const lines=form.mode==='receive'?form.lines.filter(l=>Number(l.packCount)!==0):form.lines;
+   const items=lines.map(l=>{const {total,...item}=calculatePack(l);return item;});
+   if(!items.length||items.some(i=>!i.productId))throw Error('กรุณาเลือกสินค้าและจำนวนที่รับจริง');if(new Set(items.map(i=>i.productId)).size!==items.length)throw Error('สินค้าซ้ำ กรุณารวมจำนวนในแถวเดียว');
+   const values=[form.discount,form.shipping,form.paidAmount].map(Number);if(values.some(n=>!Number.isFinite(n)||n<0))throw Error('ส่วนลด ค่าส่ง และยอดจ่ายต้องไม่ติดลบ');
+   payload={supplierId:form.supplierId,items,notes:form.notes,documentNo:form.documentNo,discount:values[0],shipping:values[1],paidAmount:values[2],paymentMethod:form.paymentMethod,dueDate:form.dueDate};
+   if(form.mode==='order')payload={supplierId:form.supplierId,items,notes:form.notes,expectedDate:form.expectedDate,workflow:'order.create'};
+   if(form.mode==='receive')payload={...payload,workflow:'order.receive',orderId:form.order!.id,expectedOrderRevision:form.order!.revision};
+  }
+  const fingerprint=JSON.stringify(payload);if(attempt.current?.fingerprint!==fingerprint)attempt.current={fingerprint,id:crypto.randomUUID()};
+  try{const key=api.draftKey();if(key)sessionStorage.setItem(key,JSON.stringify({form,attempt:attempt.current}));}catch{}
+  await api.submit(attempt.current.id,'purchase.receive',payload);try{const key=api.draftKey();if(key)sessionStorage.removeItem(key);}catch{}setSavedDraft(null);setForm(null);setMessage('ส่งรายการแล้ว กำลังรอ SERVERJJ ยืนยัน ตรวจผลได้ในประวัติและการซิงก์');refresh();
+ }catch(e){setError((e as Error).message);}finally{lock.current=false;setBusy(false);}}
+ const total=form?form.lines.reduce((n,l)=>n+(previewPack(l)?.total||0),0)-Number(form.discount||0)+Number(form.shipping||0):0;
+ return <div className="purchasing-workspace">
+  {savedDraft&&!form&&<p className="purchasing-note">มีรายการที่ยังไม่ส่ง <Button variant="outline" onClick={()=>{setForm(savedDraft.form);attempt.current=savedDraft.attempt;setSavedDraft(null);}}>ทำรายการต่อ</Button><Button variant="ghost" onClick={()=>{const key=api.draftKey();if(key)sessionStorage.removeItem(key);setSavedDraft(null);}}>ลบฉบับร่าง</Button></p>}
+  <div className="purchasing-actions"><div><h2>สั่งซื้อและรับสินค้า</h2><p>สั่งซื้อไว้ก่อน หรือรับสินค้าที่มาถึงร้านแล้ว</p></div><Button variant="outline" disabled={!supported} onClick={()=>open('order')}>+ สร้างใบสั่งซื้อ</Button><Button onClick={()=>open('direct')}>+ รับสินค้าโดยตรง / สแกน</Button></div>
+  {!supported&&<p className="purchasing-note">รออัปเดตระบบจัดซื้อบน SERVERJJ เพื่อเปิดใบสั่งซื้อและการทยอยรับ · รับสินค้าโดยตรงยังใช้งานได้</p>}
+  <div className="purchasing-stats"><span>รอรับ <strong>{orders.filter(o=>o.status==='OPEN').length}</strong></span><span>รับบางส่วน <strong>{orders.filter(o=>o.status==='PARTIAL').length}</strong></span><span>เอกสารรับสินค้า <strong>{receipts.length}</strong></span></div>
+  {message&&<p role="status" className="purchasing-note">{message}</p>}
+  <div className="purchasing-tabs"><Button variant={tab==='orders'?'default':'outline'} onClick={()=>setTab('orders')}>ใบสั่งซื้อ</Button><Button variant={tab==='receipts'?'default':'outline'} onClick={()=>setTab('receipts')}>ประวัติรับสินค้า</Button><Input aria-label="ค้นหาเอกสารจัดซื้อ" placeholder="ค้นหาเลขเอกสาร / ผู้จำหน่าย" value={search} onChange={e=>setSearch(e.target.value)}/></div>
+  <div className="purchasing-table-wrap"><table className="purchasing-table"><thead><tr><th>เอกสาร / ผู้จำหน่าย</th><th>{tab==='orders'?'ค้างรับ (ชิ้น)':'ยอดสุทธิ'}</th><th>{tab==='orders'?'สถานะ':'ค้างชำระ'}</th><th>จัดการ</th></tr></thead><tbody>
+  {tab==='orders'?orders.filter(o=>(o.orderNo+' '+o.supplierName).toLowerCase().includes(search.toLowerCase())).map(o=><tr key={o.id}><td><strong>{o.orderNo}</strong><small>{o.supplierName}{o.expectedDate?' · นัดรับ '+o.expectedDate:''}</small><small>{o.items.map(i=>i.name+' '+i.received+'/'+i.quantity).join(' · ')}</small></td><td>{o.items.reduce((n,i)=>n+i.quantity-i.received,0)}</td><td><span className={'order-status '+o.status}>{statuses[o.status]}</span></td><td>{<Button variant="outline" onClick={()=>printDocument(o.orderNo,[o.supplierName,'สถานะ: '+statuses[o.status]],o.items.map(i=>({'สินค้า':i.name,'สั่งซื้อ':i.quantity,'รับแล้ว':i.received,'ค้างรับ':i.quantity-i.received,'ราคาต่อชิ้น':i.unitCost})))}>พิมพ์ / PDF</Button>}{['OPEN','PARTIAL'].includes(o.status)?<div className="order-row-actions"><Button disabled={pending(o.id)||!supported} onClick={()=>open('receive',o)}>{pending(o.id)?'กำลังยืนยัน':'รับสินค้า'}</Button><Button variant="ghost" disabled={pending(o.id)||!supported} onClick={()=>open('cancel',o)}>ปิดยอดค้าง</Button></div>:'—'}</td></tr>):receipts.filter(p=>(p.purchaseNo+' '+p.supplierSnapshot.name).toLowerCase().includes(search.toLowerCase())).map(p=><tr key={p.id}><td><strong>{p.purchaseNo}</strong><small>{p.supplierSnapshot.name}</small></td><td>{money(p.total)}</td><td>{money(p.balance)}</td><td><div className="order-row-actions"><Button variant="outline" onClick={()=>onReceipt(p)}>ดูเอกสาร</Button><Button variant="outline" disabled={!supported||pending(p.id)||p.balance<=0} onClick={()=>setSettlement({purchase:p,mode:'pay'})}>ชำระหนี้</Button><Button variant="ghost" disabled={!supported||pending(p.id)} onClick={()=>setSettlement({purchase:p,mode:'return'})}>คืนสินค้า</Button></div></td></tr>)}
+  </tbody></table>{(tab==='orders'?orders:receipts).length===0&&<p className="purchasing-empty">ยังไม่มี{tab==='orders'?'ใบสั่งซื้อ':'เอกสารรับสินค้า'}</p>}</div>
+  {settlement&&<Settlement {...settlement} onClose={()=>setSettlement(null)} onSaved={()=>{setMessage('ส่งรายการแล้ว ตรวจผลในประวัติและการซิงก์');refresh();}}/>}
+  <Dialog open={!!form} onOpenChange={v=>{if(!v&&!busy)setForm(null);}}><DialogContent className="office-dialog wide purchase-dialog" showCloseButton={!busy}><DialogHeader><DialogTitle>{form?.mode==='order'?'สร้างใบสั่งซื้อ':form?.mode==='receive'?'รับสินค้าตามใบสั่งซื้อ':form?.mode==='cancel'?'ปิดยอดค้างรับ':'รับสินค้าโดยตรง'}</DialogTitle><DialogDescription>{form?.order?.orderNo||'ยิงบาร์โค้ดชิ้นหรือแพ็ก ระบบนับตามรหัสที่ตั้งไว้'}{form?.mode==='order'?' · ยังไม่เพิ่มสต๊อก':''}</DialogDescription></DialogHeader>
+  {form&&<><div className="form-scroll">{message&&<p role="status" className="purchasing-note">{message}</p>}
+   {form.mode!=='cancel'&&<><label className="office-field"><span>ผู้จำหน่าย</span><select disabled={busy||!!form.order} value={form.supplierId} onChange={e=>update('supplierId',e.target.value)}><option value="">เลือกผู้จำหน่าย</option>{snapshot?.suppliers.filter(s=>s.active!==false).map(s=><option key={s.id} value={s.id}>{s.name} · {s.code}</option>)}</select></label>
+   <div className="barcode-receive"><label className="office-field"><span>สแกนบาร์โค้ดชิ้น / แพ็ก</span><Input ref={scanInput} disabled={busy} value={scan} onChange={e=>setScan(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();scanBarcode();}}} placeholder="ยิงบาร์โค้ดแล้ว Enter"/></label><Button variant="outline" disabled={busy} onClick={scanBarcode}>เพิ่มจากบาร์โค้ด</Button></div>
+   {form.mode==='receive'&&<p className="purchasing-note">กรอกจำนวนที่รับครั้งนี้ หรือยิงบาร์โค้ด · รายการที่ยังไม่รับให้คงเป็น 0</p>}
+   {form.lines.map((line,index)=>{const result=previewPack(line),product=products.find(p=>p.id===line.productId),ordered=form.order?.items.find(i=>i.productId===line.productId);return <div className="purchase-pack-card" key={index}><div className="purchase-pack-main"><label className="office-field"><span>สินค้า {index+1}{ordered?' · ค้างรับ '+(ordered.quantity-ordered.received)+' ชิ้น':''}</span><select disabled={busy||!!form.order} value={line.productId} onChange={e=>{const p=products.find(p=>p.id===e.target.value);row(index,{...line,productId:e.target.value,piecesPerPack:'1',packCost:String(p?.costPrice||0)});}}><option value="">เลือกสินค้า</option>{products.filter(p=>p.enabled!==false).map(p=><option key={p.id} value={p.id}>{p.name} · {p.sku}</option>)}</select></label><div className="purchase-pack-fields">{([{key:'packCount',label:'จำนวนแพ็ก / ชิ้น'},{key:'piecesPerPack',label:'ชิ้นต่อแพ็ก'},{key:'packCost',label:'บาทต่อแพ็ก / ชิ้น'}] as const).map(f=><label className="office-field" key={f.key}><span>{f.label}</span><Input disabled={busy} type="number" min={f.key==='piecesPerPack'?1:0} aria-label={`${f.label} สินค้า ${index+1}`} value={line[f.key]} onChange={e=>row(index,{...line,[f.key]:e.target.value})}/></label>)}</div><Button variant="ghost" disabled={busy||!!form.order} aria-label={`ลบสินค้า ${index+1}`} onClick={()=>setForm({...form,lines:form.lines.filter((_,i)=>i!==index)})}>×</Button></div><div className="purchase-pack-summary"><span>รวม <strong>{result?.quantity||0}</strong> ชิ้น</span><span>ต้นทุน/ชิ้น <strong>{result?money(result.unitCost):'—'}</strong></span><span className="purchase-pack-amount">รวม <strong>{result?money(result.total):'—'}</strong> บาท</span></div></div>;})}
+   {!form.order&&<Button variant="outline" disabled={busy} onClick={()=>setForm({...form,lines:[...form.lines,newPackLine()]})}>+ เพิ่มรายการ</Button>}
+   <div className="form-grid">{form.mode==='order'?<label className="office-field"><span>วันที่นัดรับ</span><Input type="date" value={form.expectedDate} onChange={e=>update('expectedDate',e.target.value)}/></label>:<>{([{key:'documentNo',label:'เลขเอกสารผู้จำหน่าย',type:'text'},{key:'discount',label:'ส่วนลด',type:'number'},{key:'shipping',label:'ค่าขนส่ง',type:'number'},{key:'paidAmount',label:'ชำระแล้ว',type:'number'},{key:'dueDate',label:'กำหนดชำระ',type:'date'}] as const).map(f=><label className="office-field" key={f.key}><span>{f.label}</span><Input disabled={busy} type={f.type} min="0" value={form[f.key]} onChange={e=>update(f.key,e.target.value)}/></label>)}<label className="office-field"><span>ช่องทางชำระ</span><select value={form.paymentMethod} disabled={busy} onChange={e=>update('paymentMethod',e.target.value)}><option value="credit">เครดิต / ยังไม่ชำระ</option><option value="cash">เงินสดนอกลิ้นชัก POS</option><option value="qr">QR / โอน</option></select></label></>}</div></>}
+   <label className="office-field"><span>{form.mode==='cancel'?'เหตุผลปิดยอดค้าง (สินค้าที่รับแล้วคงเดิม)':'หมายเหตุ'}</span><Input disabled={busy} value={form.notes} onChange={e=>update('notes',e.target.value)}/></label>
+   {error&&<p className="office-error" role="alert">{error}</p>}
+  </div><DialogFooter>{form.mode!=='cancel'&&<div className="purchase-footer-total"><span>{form.mode==='order'?'ยอดสั่งซื้อ':'รับครั้งนี้'}</span><strong>{money(total)}<small> บาท</small></strong></div>}<Button variant="outline" disabled={busy} onClick={()=>{setSavedDraft({form,attempt:attempt.current});setForm(null);}}>เก็บร่าง / ปิด</Button><Button disabled={busy} onClick={()=>void save()}>{busy?'กำลังส่ง…':form.mode==='order'?'บันทึกใบสั่งซื้อ':form.mode==='cancel'?'ยืนยันปิดยอดค้าง':'ยืนยันรับสินค้า'}</Button></DialogFooter></>}
+  </DialogContent></Dialog>
+ </div>;
+}

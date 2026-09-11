@@ -1,0 +1,17 @@
+import {zipSync,strToU8} from 'fflate';
+type Cell=string|number|null;
+const escape=(v:unknown)=>String(v??'').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g,'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
+const column=(i:number):string=>{let s='';for(i++;i;i=Math.floor((i-1)/26))s=String.fromCharCode(65+(i-1)%26)+s;return s;};
+function sheet(rows:Cell[][]){return '<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols><col min="1" max="30" width="24" customWidth="1"/></cols><sheetData>'+rows.map((r,i)=>`<row r="${i+1}">${r.map((v,j)=>v===null?'':`<c r="${column(j)}${i+1}"${typeof v==='number'&&Number.isFinite(v)?`><v>${v}</v>`:` t="inlineStr"><is><t xml:space="preserve">${escape(v)}</t></is>`}</c>`).join('')}</row>`).join('')+'</sheetData></worksheet>';}
+export function workbook(rows:Record<string,Cell>[],metadata:Record<string,Cell>){
+ const columns=[...new Set(rows.flatMap(r=>Object.keys(r)))];
+ const xml:Record<string,string>={
+ '[Content_Types].xml':'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>',
+ '_rels/.rels':'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>',
+ 'xl/workbook.xml':'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="สรุปข้อมูลรายงาน" sheetId="1" r:id="rId1"/><sheet name="รายละเอียด" sheetId="2" r:id="rId2"/></sheets></workbook>',
+ 'xl/_rels/workbook.xml.rels':'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/></Relationships>',
+ 'xl/worksheets/sheet1.xml':sheet([['รายการ','ค่า'],...Object.entries(metadata)]),
+ 'xl/worksheets/sheet2.xml':sheet([columns,...rows.map(r=>columns.map(c=>r[c]??null))])};
+ return zipSync(Object.fromEntries(Object.entries(xml).map(([k,v])=>[k,strToU8(v)])),{level:6});
+}
+export function downloadExcel(rows:Record<string,Cell>[],metadata:Record<string,Cell>,name:string){const bytes=workbook(rows,metadata);const url=URL.createObjectURL(new Blob([new Uint8Array(bytes)],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));const a=document.createElement('a');a.href=url;a.download=name+'.xlsx';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}

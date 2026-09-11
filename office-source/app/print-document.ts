@@ -1,0 +1,8 @@
+export function printDocument(title:string,details:string[],rows:Record<string,string|number|null>[]){
+ const frame=document.createElement('iframe');frame.title='เอกสารสำหรับพิมพ์';frame.style.cssText='position:fixed;width:1px;height:1px;right:0;bottom:0;border:0';document.body.appendChild(frame);
+ const doc=frame.contentDocument!;doc.open();doc.write('<!doctype html><html lang="th"><head><meta charset="utf-8"><title></title><style>body{font:12px Tahoma,Arial,sans-serif;color:#182331;padding:16px}h1{font-size:20px}p{line-height:1.6}table{width:100%;border-collapse:collapse}th,td{padding:7px;border:1px solid #ccd2da;text-align:left;overflow-wrap:anywhere}th{background:#f0f2f5}thead{display:table-header-group}tr{break-inside:avoid}@page{size:A4 landscape;margin:12mm}</style></head><body></body></html>');doc.close();doc.title=title;
+ const h=doc.createElement('h1');h.textContent='ชุติมา · '+title;doc.body.appendChild(h);for(const line of details){const p=doc.createElement('p');p.textContent=line;doc.body.appendChild(p);}
+ const columns=[...new Set(rows.flatMap(r=>Object.keys(r)))],table=doc.createElement('table'),head=table.createTHead().insertRow();for(const column of columns){const th=doc.createElement('th');th.textContent=column;head.appendChild(th);}const body=table.createTBody();for(const row of rows){const tr=body.insertRow();for(const column of columns){const cell=tr.insertCell();const v=row[column];cell.textContent=typeof v==='number'?v.toLocaleString('th-TH',{maximumFractionDigits:2}):v??'—';}}doc.body.appendChild(table);
+ setTimeout(()=>{frame.contentWindow?.focus();frame.contentWindow?.print();setTimeout(()=>frame.remove(),60000);},150);
+}
+
