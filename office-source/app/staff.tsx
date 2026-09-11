@@ -13,7 +13,7 @@ export default function Staff(){
  useEffect(()=>{void refresh();},[]);
  async function save(e:React.FormEvent){e.preventDefault();if(!draft||lock.current)return;setError('');setNotice('');
   if(draft.password!==draft.confirm){setError('รหัสผ่านทั้งสองช่องไม่ตรงกัน');return;}
-  if((!draft.userId||draft.password)&&draft.password.length<12){setError('รหัสผ่านต้องมีอย่างน้อย 12 ตัวอักษร');return;}
+  if((!draft.userId||draft.password)&&draft.password.length<6){setError('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร');return;}
   lock.current=true;setBusy(true);
   try{if(draft.userId)await api.updateStaff({userId:draft.userId,role:draft.role,active:draft.active,...(draft.password?{password:draft.password}:{})});else await api.createStaff({username:draft.username,displayName:draft.displayName,role:draft.role,password:draft.password});setDraft(null);setNotice('บันทึกพนักงานเรียบร้อย ใช้ชื่อผู้ใช้และรหัสผ่านเข้าเว็บไซต์นี้ได้');await refresh();}catch(e){setError((e as Error).message);}finally{lock.current=false;setBusy(false);}
  }
@@ -26,7 +26,7 @@ export default function Staff(){
  <label className="office-field"><span>ชื่อผู้ใช้ · อังกฤษ ตัวเลข . _ - จำนวน 3–32 ตัว</span><Input required pattern="[a-zA-Z0-9][a-zA-Z0-9._-]{2,31}" maxLength={32} autoComplete="off" disabled={busy||!!draft.userId} value={draft.username} onChange={e=>setDraft({...draft,username:e.target.value})}/></label>
  <label className="office-field"><span>สิทธิ์การใช้งาน</span><select className="native-select" disabled={busy} value={draft.role} onChange={e=>setDraft({...draft,role:e.target.value as api.StaffRole})}>{Object.entries(roles).map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label>
  {draft.userId&&<label><input type="checkbox" disabled={busy} checked={draft.active} onChange={e=>setDraft({...draft,active:e.target.checked})}/> เปิดใช้งานบัญชีนี้</label>}
- <label className="office-field"><span>{draft.userId?'รหัสผ่านใหม่ · เว้นว่างเพื่อใช้รหัสเดิม':'รหัสผ่าน · อย่างน้อย 12 ตัวอักษร'}</span><Input type="password" minLength={12} maxLength={128} required={!draft.userId} autoComplete="new-password" disabled={busy} value={draft.password} onChange={e=>setDraft({...draft,password:e.target.value})}/></label>
+ <label className="office-field"><span>{draft.userId?'รหัสผ่านใหม่ · เว้นว่างเพื่อใช้รหัสเดิม':'รหัสผ่าน · อย่างน้อย 6 ตัวอักษร'}</span><Input type="password" minLength={6} maxLength={128} required={!draft.userId} autoComplete="new-password" disabled={busy} value={draft.password} onChange={e=>setDraft({...draft,password:e.target.value})}/></label>
  <label className="office-field"><span>ยืนยันรหัสผ่าน</span><Input type="password" required={!!draft.password} autoComplete="new-password" disabled={busy} value={draft.confirm} onChange={e=>setDraft({...draft,confirm:e.target.value})}/></label>
  {error&&<p role="alert" className="office-error">{error}</p>}<Button disabled={busy} type="submit">{busy?'กำลังบันทึก…':'บันทึกพนักงาน'}</Button></form>}</DialogContent></Dialog></div>;
 }

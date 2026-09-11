@@ -20,7 +20,7 @@ export function createHandler({env,fetchImpl=fetch}){return async req=>{
   if(input.action==='list'){if(!owner)throw failure(403,'เฉพาะเจ้าของร้าน');return reply(200,{users:await admin('/rest/v1/office_staff?shop_id=eq.'+shop+'&select=user_id,username,display_name,role,active,created_at&order=created_at.desc')});}
   if(input.action==='create'){
    if(!owner)throw failure(403,'เฉพาะเจ้าของร้าน');const username=String(input.username||'').trim().toLowerCase(),name=String(input.displayName||'').trim();
-   if(!/^[a-z0-9][a-z0-9._-]{2,31}$/.test(username)||!name||name.length>120||!roles.includes(input.role)||typeof input.password!=='string'||input.password.length<12||input.password.length>128)throw failure(400,'ชื่อผู้ใช้ 3–32 ตัวอักษรอังกฤษ และรหัสผ่านอย่างน้อย 12 ตัวอักษร');
+   if(!/^[a-z0-9][a-z0-9._-]{2,31}$/.test(username)||!name||name.length>120||!roles.includes(input.role)||typeof input.password!=='string'||input.password.length<6||input.password.length>128)throw failure(400,'ชื่อผู้ใช้ 3–32 ตัวอักษรอังกฤษ และรหัสผ่านอย่างน้อย 6 ตัวอักษร');
    if((await admin('/rest/v1/office_staff?username=eq.'+encodeURIComponent(username)+'&select=user_id')).length)throw failure(409,'ชื่อผู้ใช้นี้มีแล้ว');
    const created=await admin('/auth/v1/admin/users','POST',{email:username+'@staff.chutima.invalid',password:input.password,email_confirm:true,app_metadata:{office_shop_id:shop}});const id=created.id||created.user?.id;if(!uuid(id))throw failure(502,'สร้างบัญชีไม่สำเร็จ');
    try{await admin('/rest/v1/office_staff','POST',{user_id:id,shop_id:shop,username,display_name:name,role:input.role,active:true});}catch(e){await admin('/auth/v1/admin/users/'+id,'DELETE').catch(()=>{});throw e;}
@@ -29,7 +29,7 @@ export function createHandler({env,fetchImpl=fetch}){return async req=>{
   if(input.action==='update'){
    if(!owner||!uuid(input.userId))throw failure(403,'เฉพาะเจ้าของร้าน');const target=(await admin('/rest/v1/office_staff?shop_id=eq.'+shop+'&user_id=eq.'+input.userId+'&select=user_id'))[0];if(!target)throw failure(404,'ไม่พบพนักงานร้านนี้');
    if(!roles.includes(input.role)||typeof input.active!=='boolean')throw failure(400,'สิทธิ์ไม่ถูกต้อง');
-   if(input.password){if(typeof input.password!=='string'||input.password.length<12||input.password.length>128)throw failure(400,'รหัสผ่านอย่างน้อย 12 ตัวอักษร');await admin('/auth/v1/admin/users/'+target.user_id,'PUT',{password:input.password});}
+   if(input.password){if(typeof input.password!=='string'||input.password.length<6||input.password.length>128)throw failure(400,'รหัสผ่านอย่างน้อย 6 ตัวอักษร');await admin('/auth/v1/admin/users/'+target.user_id,'PUT',{password:input.password});}
    await admin('/rest/v1/office_staff?shop_id=eq.'+shop+'&user_id=eq.'+target.user_id,'PATCH',{role:input.role,active:input.active,updated_at:new Date().toISOString()});return reply(200,{updated:true});
   }
   if(input.action==='submit'){
