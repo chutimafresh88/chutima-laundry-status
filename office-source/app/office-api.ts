@@ -5,16 +5,17 @@ export type ReportPage={requestId:string;kind:string;from:string;to:string;gener
 export type PurchaseOrder=DocFields&{id:string;orderNo:string;supplierId:string;supplierName:string;items:{productId:string;name:string;sku:string;quantity:number;received:number;unitCost:number;packCount?:number;piecesPerPack?:number;packCost?:number}[];status:'OPEN'|'PARTIAL'|'RECEIVED'|'CANCELLED';revision:number;total:number;notes:string;expectedDate:string;createdAt:string};
 import { defaultPublishableKey } from './cloud-config';
 export const cloudUrl = 'https://dgvdwdmaxvtfnjiiixcm.supabase.co';
-export type Product = {allocations?:{deviceId:string;label:string;available:number}[];id:string;name:string;sku:string;barcode:string;packBarcode?:string;packSize?:number;category:string;unit:string;price:number;costPrice:number;stockOnHand:number;lowStockAt:number;enabled:boolean;trackStock:boolean;image:string;version:string;stockVersion:string;updatedAt:string};
+export type Product = {allocations?:{deviceId:string;label:string;available:number}[];id:string;name:string;sku:string;barcode:string;packBarcode?:string;packSize?:number;category:string;unit:string;price:number;costPrice:number;stockOnHand:number;lowStockAt:number;enabled:boolean;showInQueue?:boolean;trackStock:boolean;image:string;version:string;stockVersion:string;updatedAt:string};
 export type Supplier = {id:string;code:string;name:string;phone?:string;contactName?:string;lineId?:string;address?:string;notes?:string;taxId?:string;creditDays?:number;active:boolean;updatedAt?:string};
 export type Purchase = DocFields&{status?:string;supplierId?:string;dueDate?:string;paymentMethod?:string;revision?:number;refundReceivable?:number;orderNo?:string;id:string;purchaseNo:string;supplierSnapshot:Partial<Supplier>&{name:string};documentNo:string;total:number;paidAmount:number;balance:number;createdAt:string;items:{sku?:string;packCount?:number;piecesPerPack?:number;packCost?:number;productId?:string;effectiveUnitCost?:number;name:string;quantity:number;unitCost:number;lineTotal:number}[]};
 export type Movement = {id:string;productId:string;delta:number;type:string;qtyBefore:number;qtyAfter:number;note:string;documentNo:string;createdAt:string;actor:string};
-export type Snapshot = {officeSettings?:ShopSettings;dashboard?:{date:string;cash:Record<string,number>;queues:Record<string,number>};reportPages?:ReportPage[];reportPage?:ReportPage|null;reportVersion?:number;purchaseOrders?:PurchaseOrder[];purchaseWorkflowVersion?:number;schema:number;revision:number;products:Product[];categories:string[];suppliers:Supplier[];purchases:Purchase[];movements:Movement[]};
+export type VendingMachine={id:string;name:string;active:boolean;revision:number;cashBalance:number;items:{productId:string;name:string;unit:string;price:number;stock:number;queueDefault?:boolean}[]};
+export type Snapshot = {vendingWorkflowVersion?:number;employeeWorkflowVersion?:number;vendingMachines?:VendingMachine[];vendingEvents?:Record<string,unknown>[];officeSettings?:ShopSettings;dashboard?:{shifts?:{id:string;employeeName:string;openedAt:string;basketCount:number;basketServiceFee:number}[];date:string;cash:Record<string,number>;queues:Record<string,number>};reportPages?:ReportPage[];reportPage?:ReportPage|null;reportVersion?:number;purchaseOrders?:PurchaseOrder[];purchaseWorkflowVersion?:number;schema:number;revision:number;products:Product[];categories:string[];suppliers:Supplier[];purchases:Purchase[];movements:Movement[]};
 export type InventoryRequest = {id:string;type:string;payload:Record<string,unknown>;status:'pending'|'applied'|'rejected';message:string;created_at:string;completed_at:string};
 export type DeviceStatus = {id:string;label:string;online:boolean;pending:number};
 export type OfficeData = {snapshot:Snapshot|null;snapshotAt:string|null;requests:InventoryRequest[];source?:'pos'|'serverjj';devices?:DeviceStatus[]};
 type CentralStatus = {active:boolean;generation:string|null;revision:number;manifest:Record<string,number>;device_status:DeviceStatus[];synced_at:string|null};
-type CentralRow = {collection:'products'|'suppliers'|'purchases'|'movements'|'meta'|'purchaseOrders'|'supplierReturns'|'reportPages';id:string;body:Record<string,unknown>};
+type CentralRow = {collection:'products'|'suppliers'|'purchases'|'movements'|'meta'|'purchaseOrders'|'supplierReturns'|'reportPages'|'vendingMachines'|'vendingEvents';id:string;body:Record<string,unknown>};
 type Session = {access_token:string;refresh_token:string;expires_at:number;email:string};
 type Member = {user_id:string;shop_id:string;role:string};
 type AuthReply = {access_token:string;refresh_token:string;expires_in:number};
@@ -40,23 +41,23 @@ async function request<T=unknown>(path:string,options:RequestInit={}):Promise<T>
   if(session.expires_at<Date.now()+60000)await refresh();
   try{return await raw<T>(path,options,session.access_token);}catch(error){if((error as {status?:number}).status===401){await refresh();return raw<T>(path,options,session!.access_token);}throw error;}
 }
-export type StaffRole='manager'|'stock'|'reports';
-export type StaffUser={user_id:string;username:string;display_name:string;role:StaffRole;active:boolean;created_at:string};
+export type StaffRole='manager'|'employee';
+export type StaffUser={pos_ready?:boolean;source?:'pos';user_id:string;username:string;display_name:string;role:StaffRole;active:boolean;created_at:string};
 export function draftKey(){return member?'chutima-office-draft:'+member.shop_id+':'+member.user_id:null;}
 export function currentRole(){return member?.role||'';}
 export function canWrite(){return ['owner','manager'].includes(currentRole());}
-export function canSeeCost(){return ['owner','manager','reports'].includes(currentRole());}
-export function allowedSection(id:string){const role=currentRole();return role==='owner'||role==='manager'&&id!=='staff'||role==='reports'&&['dashboard','products','reports','history','settings'].includes(id)||role==='stock'&&id==='products';}
+export function canSeeCost(){return ['owner','manager'].includes(currentRole());}
+export function allowedSection(id:string){return ['owner','manager'].includes(currentRole())||['employee','stock','reports'].includes(currentRole())&&id==='products';}
 async function staffCall<T>(body:Record<string,unknown>){return request<T>('/functions/v1/office-staff',{method:'POST',body:JSON.stringify(body)});}
 export async function listStaff(){return (await staffCall<{users:StaffUser[]}>({action:'list'})).users;}
 export async function createStaff(input:{username:string;displayName:string;role:StaffRole;password:string}){return staffCall({action:'create',...input});}
-export async function updateStaff(input:{userId:string;role:StaffRole;active:boolean;password?:string}){return staffCall({action:'update',...input});}
+export async function updateStaff(input:{userId:string;displayName?:string;role:StaffRole;active:boolean;password?:string}){return staffCall({action:'update',...input});}
 async function getMember(){
  const rows=await request<Member[]>('/rest/v1/inventory_members?select=user_id,shop_id,role');
  if(rows.length===1&&rows[0].role==='owner'){member=rows[0];return member;}
  const staff=await request<(Member&{active:boolean})[]>('/rest/v1/office_staff?select=user_id,shop_id,role,active');
- if(staff.length!==1||!staff[0].active||!['manager','stock','reports'].includes(staff[0].role))throw Error('บัญชีไม่มีสิทธิ์หรือถูกปิดใช้งาน กรุณาติดต่อเจ้าของร้าน');
- member=staff[0];return member;
+ if(staff.length!==1||!staff[0].active||!['manager','employee','stock','reports'].includes(staff[0].role))throw Error('บัญชีไม่มีสิทธิ์หรือถูกปิดใช้งาน กรุณาติดต่อเจ้าของร้าน');
+ member={...staff[0],role:['stock','reports'].includes(staff[0].role)?'employee':staff[0].role};return member;
 }
 export async function login(email:string,password:string){
   if(!publicKey())throw Error('กรุณาตั้งค่าการเชื่อมต่อก่อนเข้าสู่ระบบ');
@@ -77,7 +78,7 @@ async function centralSnapshot(shop:string,status:CentralStatus):Promise<Snapsho
   if(centralCache?.shop===shop&&centralCache.generation===status.generation&&centralCache.revision===Number(status.revision))return centralCache.snapshot;
   const counts:Record<string,number>={products:0,suppliers:0,purchases:0,movements:0,meta:0};
   for(const key of Object.keys(counts))if(!Number.isSafeInteger(status.manifest[key])||status.manifest[key]<0)throw Error('รายการข้อมูลจาก SERVERJJ ไม่ถูกต้อง');
-  for(const k of ['purchaseOrders','supplierReturns','reportPages'])if(k in status.manifest){if(!Number.isSafeInteger(status.manifest[k])||status.manifest[k]<0)throw Error('จำนวนรายการไม่ถูกต้อง');counts[k]=0;}
+  for(const k of ['purchaseOrders','supplierReturns','reportPages','vendingMachines','vendingEvents'])if(k in status.manifest){if(!Number.isSafeInteger(status.manifest[k])||status.manifest[k]<0)throw Error('จำนวนรายการไม่ถูกต้อง');counts[k]=0;}
   const rows:CentralRow[]=[];let offset=0;
   // A publication is immutable. A generation switch during paging is retried
   // from its new manifest instead of showing a mixture of different snapshots.
@@ -93,6 +94,7 @@ async function centralSnapshot(shop:string,status:CentralStatus):Promise<Snapsho
   if(Object.keys(counts).some(k=>counts[k]!==status.manifest[k]))throw Error('ข้อมูลจาก SERVERJJ ไม่ครบ กรุณาอัปเดตอีกครั้ง');
   const list=(collection:CentralRow['collection'])=>rows.filter(r=>r.collection===collection).map(r=>r.body);
   const snapshot:Snapshot={officeSettings:list('meta')[0].officeSettings as ShopSettings,dashboard:list('meta')[0].dashboard as Snapshot['dashboard'],schema:1,revision:Number(status.revision),products:list('products') as Product[],suppliers:list('suppliers') as Supplier[],purchases:list('purchases') as Purchase[],movements:list('movements') as Movement[],categories:(list('meta')[0].categories||[]) as string[],purchaseOrders:list('purchaseOrders') as PurchaseOrder[],reportPages:list('reportPages') as ReportPage[],purchaseWorkflowVersion:Number(list('meta')[0].purchaseWorkflowVersion||0),reportVersion:Number(list('meta')[0].reportVersion||0),reportPage:(list('meta')[0].reportPage||null) as ReportPage|null};
+  snapshot.vendingMachines=list('vendingMachines') as VendingMachine[];snapshot.vendingEvents=list('vendingEvents');snapshot.vendingWorkflowVersion=Number(list('meta')[0].vendingWorkflowVersion||0);snapshot.employeeWorkflowVersion=Number(list('meta')[0].employeeWorkflowVersion||0);
   snapshot.purchases.sort((a,b)=>b.createdAt.localeCompare(a.createdAt)||b.id.localeCompare(a.id));
   snapshot.movements.sort((a,b)=>b.createdAt.localeCompare(a.createdAt)||b.id.localeCompare(a.id));
   centralCache={shop,generation:status.generation,revision:Number(status.revision),snapshot};return snapshot;

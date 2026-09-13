@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {purchasePaymentStatus as status,bangkokToday} from '../app/purchase-payment-status.ts';
+assert.equal(status({balance:0,dueDate:'2026-09-01'},'2026-09-13').kind,'paid');
+assert.equal(status({balance:0,status:'CANCELLED'},'2026-09-13').kind,'cancelled');
+assert.equal(status({balance:undefined},'2026-09-13').kind,'unknown');
+assert.equal(status({balance:0.01,dueDate:'2026-09-15'},'2026-09-13').days,2);
+assert.equal(status({balance:50,dueDate:'2026-09-13'},'2026-09-13').label,'ครบกำหนดวันนี้');
+assert.equal(status({balance:50,dueDate:'2026-09-12'},'2026-09-13').label,'เกินกำหนด 1 วัน');
+for(const dueDate of ['',undefined,'bad','2026-02-31'])assert.equal(status({balance:50,dueDate},'2026-09-13').kind,'undated');
+assert.equal(bangkokToday(new Date('2026-09-13T16:59:59Z')),'2026-09-13');
+assert.equal(bangkokToday(new Date('2026-09-13T17:00:00Z')),'2026-09-14');
+console.log('PASS receipt payment badges: paid, partial credit, due today, overdue, cancelled, unknown and Bangkok midnight');

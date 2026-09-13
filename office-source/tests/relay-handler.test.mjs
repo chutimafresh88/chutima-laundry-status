@@ -1,0 +1,31 @@
+import assert from 'node:assert/strict';
+import {createHandler} from '../supabase/functions/serverjj-relay/handler.mjs';
+const serverId='10000000-0000-4000-8000-000000000001',shopId='20000000-0000-4000-8000-000000000001',userId='30000000-0000-4000-8000-000000000001';
+const machineKey='synthetic-machine-fixture-'.repeat(2),keyHash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(machineKey)))].map(n=>n.toString(16).padStart(2,'0')).join('');
+let role='owner',registered=false,calls=[];
+const env=k=>({SUPABASE_URL:'https://fixture.invalid',SUPABASE_SECRET_KEYS:JSON.stringify({default:'sb_secret_synthetic_fixture_only'}),SUPABASE_PUBLISHABLE_KEYS:JSON.stringify({default:'sb_publishable_synthetic_fixture_only'})})[k];
+const fetchImpl=async(url,options)=>{
+ const path=new URL(url).pathname,query=new URL(url).search;calls.push({path,query,...options});
+ const json=data=>new Response(JSON.stringify(data),{status:200});
+ if(path==='/auth/v1/user')return json({id:userId});
+ if(path==='/rest/v1/inventory_members')return json([{shop_id:shopId,role}]);
+ if(path==='/rest/v1/inventory_central'&&options.method==='POST'){registered=true;return new Response(null,{status:201});}
+ if(path==='/rest/v1/inventory_central'&&options.method==='GET')return json(registered?[{shop_id:shopId,server_id:serverId,key_hash:keyHash,active:true,revision:3,generation:null}]:[]);
+ if(path==='/rest/v1/inventory_central_requests'&&options.method==='GET')return json([]);
+ return new Response(null,{status:204});
+};
+const handler=createHandler({env,fetchImpl});
+const call=(body,headers={})=>handler(new Request('https://fixture.invalid/relay',{method:'POST',headers:{'Content-Type':'application/json',...headers},body:JSON.stringify({serverId,...body})}));
+assert.equal((await call({action:'register',keyHash},{Origin:'https://attacker.invalid',Authorization:'Bearer fixture'})).status,403);
+assert.equal((await call({action:'register',keyHash})).status,401);
+role='device';assert.equal((await call({action:'register',keyHash},{Authorization:'Bearer fixture'})).status,403);role='owner';
+const registration=await call({action:'register',keyHash,shopId:'untrusted-other-shop'},{Authorization:'Bearer fixture'});
+assert.equal(registration.status,200);assert.equal((await registration.json()).shopId,shopId);
+const insert=JSON.parse(calls.find(c=>c.path==='/rest/v1/inventory_central'&&c.method==='POST').body);assert.equal(insert.shop_id,shopId);assert.equal(insert.key_hash,keyHash);assert(!('key' in insert));
+assert.equal((await call({action:'exchange',devices:[]},{'X-Chutima-Key':'x'.repeat(50)})).status,401);
+calls=[];const exchange=await call({action:'exchange',devices:[],shopId:'ignored'},{'X-Chutima-Key':machineKey});assert.equal(exchange.status,200);
+assert(calls.find(c=>c.path==='/rest/v1/inventory_central_requests').query.includes('shop_id=eq.'+shopId));
+const result=await call({action:'result',id:'40000000-0000-4000-8000-000000000001',status:'applied',message:'ok',shopId:'ignored'},{'X-Chutima-Key':machineKey});assert.equal(result.status,200);
+const rpc=JSON.parse(calls.find(c=>c.path==='/rest/v1/rpc/inventory_central_result').body);assert.equal(rpc.p_shop,shopId);assert.equal(rpc.p_key_hash,keyHash);
+const body=await exchange.text();assert(!body.includes(machineKey));assert(!body.includes('sb_secret_'));assert(!body.includes(keyHash));
+console.log('PASS owner-only registration, server key authentication, origin rejection, shop scope derived server-side, no key disclosure');

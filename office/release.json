@@ -1,1 +1,10 @@
-{"version": "0.17.0", "serverVersion": "0.17.0", "features": ["purchasing", "barcode-receiving", "reports-xlsx", "average-cost", "staff-user-password"], "installer": "../serverjj-updates/0.17.0/Chutima-Server-Update-0.17.0.exe"}
+{
+  "features": [
+    "receipt-payment-credit-status",
+    "queue-products",
+    "basket-shift-reports",
+    "manager-employee"
+  ],
+  "version": "0.20.0",
+  "releasedAt": "2026-09-13T06:09:59.6632636Z"
+}
