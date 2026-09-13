@@ -11,7 +11,7 @@ function fixture(role='employee',active=true){
   else if(path==='/rest/v1/inventory_members')result=role==='owner'?[{shop_id:shop}]:[];
   else if(path==='/rest/v1/office_staff')result=query.has('username')?[]:active?[{user_id:uid,shop_id:shop,role,display_name:'พนักงาน',active:true}]:[];
   else if(path==='/rest/v1/inventory_central')result=[{active:true,generation,revision:1,manifest:{products:1,meta:1},device_status:[],synced_at:'2026-09-10'}];
-  else if(path==='/rest/v1/inventory_central_rows')result=[{collection:'products',id:'p1',body:{id:'p1',name:'สินค้า',price:20,costPrice:10,stockOnHand:4,version:'contains-cost-10',stockVersion:'secret'}},{collection:'meta',id:'catalog',body:{employeeWorkflowVersion:1,reportPage:{rows:[{secret:100}]},purchaseOrders:[{total:500}]}}];
+  else if(path==='/rest/v1/inventory_central_rows')result=[{collection:'products',id:'p1',body:{id:'p1',name:'สินค้า',trashedAt:'2026-09-13T00:00:00Z',price:20,costPrice:10,stockOnHand:4,version:'contains-cost-10',stockVersion:'secret'}},{collection:'meta',id:'catalog',body:{productTrashVersion:1,employeeWorkflowVersion:1,reportPage:{rows:[{secret:100}]},purchaseOrders:[{total:500}]}}];
   else if(path==='/rest/v1/inventory_central_requests')result=[];
   else if(path==='/auth/v1/admin/users')result={id:'44444444-4444-4444-8444-444444444444'};
   else throw Error('unexpected '+path);
@@ -37,3 +37,6 @@ assert.equal((await fixture('owner').call({action:'create',username:'staff2',dis
 assert.equal((await fixture('manager').call({action:'submit',id:generation,type:'purchase.receive',payload:{workflow:'office.settings',settings:{name:'test'}}})).status,200);
 
 const legacy=fixture('owner');const list=await (await legacy.call({action:'list'})).json();assert.equal(list.users[0].pos_ready,false);assert.equal(list.users[0].password_verifier,undefined);assert.equal((await legacy.call({action:'update',userId:uid,role:'employee',active:true})).status,400);assert.equal(legacy.writes.length,0);
+
+assert.equal(data.snapshot.productTrashVersion,1);assert.equal(data.snapshot.products[0].trashedAt,'2026-09-13T00:00:00Z');
+const managerTrash=await (await fixture('manager').call({action:'load'})).json();assert.equal(managerTrash.snapshot.productTrashVersion,1);assert.equal(managerTrash.snapshot.products[0].trashedAt,'2026-09-13T00:00:00Z');

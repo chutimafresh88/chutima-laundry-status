@@ -6,12 +6,13 @@ global.localStorage=storage();global.sessionStorage=storage();
 const owner='00000000-0000-4000-8000-000000000001',shop='10000000-0000-4000-8000-000000000001';
 let allowed=true,expires=3600,refreshes=0,lost=false,conflict=false,rows=new Map(),requests=[];
 let centralMode='missing',generation='50000000-0000-4000-8000-000000000001',revision=8,centralReads=0,missingPage=false,switchPage=false,centralRequests=new Map();
-const centralRows=[{collection:'meta',id:'categories',body:{categories:['ทั่วไป']}},...Array.from({length:201},(_,i)=>({collection:'products',id:'p'+i,body:{id:'p'+i,name:'สินค้าทดสอบ '+i,stockOnHand:i}}))];
+const centralRows=[{collection:'meta',id:'categories',body:{categories:['ทั่วไป'],productTrashVersion:1}},...Array.from({length:201},(_,i)=>({collection:'products',id:'p'+i,body:{id:'p'+i,name:'สินค้าทดสอบ '+i,stockOnHand:i}}))];
 global.fetch=async(url,options={})=>{
   const u=new URL(url),body=options.body?JSON.parse(options.body):null;requests.push({path:u.pathname,method:options.method||'GET',headers:options.headers,body});
   const result=(data,status=200)=>new Response(data===null?null:JSON.stringify(data),{status,headers:{'Content-Type':'application/json'}});
   if(u.pathname==='/auth/v1/token'){if(u.search.includes('refresh_token')){refreshes++;return result({access_token:'refreshed',refresh_token:'new-refresh',expires_in:3600});}return result({access_token:'access',refresh_token:'refresh',expires_in:expires});}
   if(u.pathname==='/auth/v1/logout')return result(null,204);
+  if(u.pathname==='/rest/v1/office_staff')return result([]);
   if(u.pathname==='/rest/v1/inventory_members')return result(allowed?[{user_id:owner,shop_id:shop,role:'owner'}]:[]);
   if(u.pathname==='/rest/v1/inventory_central')return centralMode==='missing'?result({message:'not installed'},404):result([{active:centralMode==='active',generation,revision,manifest:{products:201,suppliers:0,purchases:0,movements:0,meta:1},device_status:[{id:'one',label:'POS 1',online:false,pending:2}],synced_at:new Date().toISOString()}]);
   if(u.pathname==='/rest/v1/inventory_central_rows'){
@@ -40,7 +41,7 @@ async function test(label,run){await run();passed++;console.log('PASS',label);}
   await test('lost response retry reuses the same request without duplication',async()=>{lost=true;const id='30000000-0000-4000-8000-000000000001';await assert.rejects(api.submit(id,'stock.receive',{quantity:1}),/Network response lost/);await api.submit(id,'stock.receive',{quantity:1});assert.equal(rows.size,1);});
   await test('conflicting duplicate IDs are rejected',async()=>{conflict=true;await assert.rejects(api.submit('30000000-0000-4000-8000-000000000001','stock.receive',{quantity:1}),/เลขรายการซ้ำ/);conflict=false;});
   await test('logout clears cached authentication',async()=>{await api.logout();assert.equal(sessionStorage.values().length,0);await assert.rejects(api.loadOffice(),/เข้าสู่ระบบ/);});
-  await test('account without owner membership is denied and logged out',async()=>{allowed=false;await assert.rejects(api.login('unknown@example.test','test'),/สิทธิ์เจ้าของร้าน/);assert.equal(sessionStorage.values().length,0);allowed=true;});
+  await test('account without owner membership is denied and logged out',async()=>{allowed=false;await assert.rejects(api.login('unknown@example.test','test'),/ไม่มีสิทธิ์/);assert.equal(sessionStorage.values().length,0);allowed=true;});
   await test('expired token refresh is shared by concurrent reads',async()=>{await api.login('owner@example.test','test');const originalNow=Date.now,advance=originalNow()+3600000;Date.now=()=>advance;try{await api.loadOffice();assert.equal(refreshes,1);}finally{Date.now=originalNow;}});
   await test('configuration rejects secret/service keys',async()=>{assert.throws(()=>api.savePublicKey('sb_secret_not_allowed'),/Publishable/);});
   await test('session restores through authorized membership check',async()=>{assert.equal(await api.restore(),'owner@example.test');});

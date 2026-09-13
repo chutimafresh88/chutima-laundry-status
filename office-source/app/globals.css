@@ -217,3 +217,5 @@ h1 {font-size:30px;font-weight:700;line-height:1.4}
 .receipt-payment-badge.today{background:#fff3d6;color:#885700}
 .receipt-payment-badge.overdue{background:#fff0ef;color:#b32e23}
 .receipt-payment-pending{color:#85611c}
+
+.product-trash-action{border-top:1px solid #e2e8f0;margin-top:16px;padding-top:12px}.product-trash-action button{width:100%;min-height:44px;color:#b42347;border-color:#efb8c6}.product-trash-action .form-help{margin-bottom:10px}

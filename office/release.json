@@ -1,10 +1,12 @@
 {
+  "version": "0.20.1",
+  "releasedAt": "2026-09-13T08:39:31.047Z",
   "features": [
     "receipt-payment-credit-status",
     "queue-products",
     "basket-shift-reports",
-    "manager-employee"
+    "manager-employee",
+    "recoverable-product-trash-no-expiry"
   ],
-  "version": "0.20.0",
-  "releasedAt": "2026-09-13T06:09:59.6632636Z"
+  "requiresServer": "0.20.1"
 }
