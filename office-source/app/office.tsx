@@ -63,10 +63,10 @@ export default function Office(){
   const catalogProducts=products.filter(p=>!p.trashedAt);
   const productPending=(id:string)=>data.requests.some(r=>r.status==='pending'&&r.type==='product.save'&&r.payload.id===id);
   const pending=data.requests.filter(r=>r.status==='pending').length,rejected=data.requests.filter(r=>r.status==='rejected').length;
-  const connected=!!snapshot,stale=!data.snapshotAt||Date.now()-new Date(data.snapshotAt).getTime()>60000;
+  const connected=!!snapshot,stale=!data.snapshotAt||Date.now()-new Date(data.snapshotAt).getTime()>180000;
   const refresh=useCallback(async()=>{if(loadLock.current)return;const version=loadVersion.current;loadLock.current=true;setLoading(true);try{const next=await api.loadOffice();if(version===loadVersion.current){setData(next);setSection(old=>api.allowedSection(old)?old:'products');if(!api.canWrite())setForm(null);setError('');}}catch(e){if(version===loadVersion.current)setError((e as Error).message);}finally{setLoading(false);loadLock.current=false;}},[]);
   useEffect(()=>{let alive=true;setKeyDraft(api.publicKey());api.restore().then(value=>{if(alive){setEmail(value);setReady(true);}});return()=>{alive=false;};},[]);
-  useEffect(()=>{if(!email)return;void refresh();const interval=setInterval(()=>{if(document.visibilityState==='visible')void refresh();},8000);return()=>clearInterval(interval);},[email,refresh]);
+  useEffect(()=>{if(!email)return;void refresh();const visible=()=>{if(document.visibilityState==='visible')void refresh();};document.addEventListener('visibilitychange',visible);const interval=setInterval(visible,60000);return()=>{clearInterval(interval);document.removeEventListener('visibilitychange',visible);};},[email,refresh]);
   const navigate=(id:string)=>{if(!api.allowedSection(id))return;setSection(id);setQuery('');setCategory('all');};
   const start=(kind:FormKind,entity?:Product|Supplier)=>{
     if(!api.canWrite())return;

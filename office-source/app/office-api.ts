@@ -13,7 +13,7 @@ export type VendingMachine={id:string;name:string;active:boolean;revision:number
 export type Snapshot = {productTrashVersion?:number;vendingWorkflowVersion?:number;employeeWorkflowVersion?:number;vendingMachines?:VendingMachine[];vendingEvents?:Record<string,unknown>[];officeSettings?:ShopSettings;dashboard?:{shifts?:{id:string;employeeName:string;openedAt:string;basketCount:number;basketServiceFee:number}[];date:string;cash:Record<string,number>;queues:Record<string,number>};reportPages?:ReportPage[];reportPage?:ReportPage|null;reportVersion?:number;purchaseOrders?:PurchaseOrder[];purchaseWorkflowVersion?:number;schema:number;revision:number;products:Product[];categories:string[];suppliers:Supplier[];purchases:Purchase[];movements:Movement[]};
 export type InventoryRequest = {id:string;type:string;payload:Record<string,unknown>;status:'pending'|'applied'|'rejected';message:string;created_at:string;completed_at:string};
 export type DeviceStatus = {id:string;label:string;online:boolean;pending:number};
-export type OfficeData = {snapshot:Snapshot|null;snapshotAt:string|null;requests:InventoryRequest[];source?:'pos'|'serverjj';devices?:DeviceStatus[]};
+export type OfficeData = {snapshot:Snapshot|null;snapshotAt:string|null;requests:InventoryRequest[];source?:'pos'|'serverjj';devices?:DeviceStatus[];generation?:string|null;revision?:number};
 type CentralStatus = {active:boolean;generation:string|null;revision:number;manifest:Record<string,number>;device_status:DeviceStatus[];synced_at:string|null};
 type CentralRow = {collection:'products'|'suppliers'|'purchases'|'movements'|'meta'|'purchaseOrders'|'supplierReturns'|'reportPages'|'vendingMachines'|'vendingEvents';id:string;body:Record<string,unknown>};
 type Session = {access_token:string;refresh_token:string;expires_at:number;email:string};
@@ -22,6 +22,7 @@ type AuthReply = {access_token:string;refresh_token:string;expires_in:number};
 const sessionKey='chutima-office-session-v1',keyName='chutima-office-public-key';
 let session:Session|null=null,member:Member|null=null,refreshing:Promise<void>|null=null;
 let centralCache:{shop:string;generation:string;revision:number;snapshot:Snapshot}|null=null;
+let staffCache:OfficeData|null=null;
 export function publicKey(){try{return localStorage.getItem(keyName)||defaultPublishableKey;}catch{return defaultPublishableKey;}}
 export function savePublicKey(key:string){if(!/^sb_publishable_[A-Za-z0-9_-]{16,}$/.test(key.trim()))throw Error('กรุณาตรวจ Publishable key ที่ขึ้นต้น sb_publishable_');localStorage.setItem(keyName,key.trim());}
 function remember(value:Session){session=value;sessionStorage.setItem(sessionKey,JSON.stringify(value));}
@@ -62,13 +63,13 @@ async function getMember(){
 export async function login(email:string,password:string){
   if(!publicKey())throw Error('กรุณาตั้งค่าการเชื่อมต่อก่อนเข้าสู่ระบบ');
   const data=await raw<AuthReply>('/auth/v1/token?grant_type=password',{method:'POST',body:JSON.stringify({email:email.trim().includes('@')?email.trim():email.trim().toLowerCase()+'@staff.chutima.invalid',password})});
-  remember({access_token:data.access_token,refresh_token:data.refresh_token,expires_at:Date.now()+Number(data.expires_in||1800)*1000,email:email.trim()});
+  staffCache=null;remember({access_token:data.access_token,refresh_token:data.refresh_token,expires_at:Date.now()+Number(data.expires_in||1800)*1000,email:email.trim()});
   try{await getMember();return session!.email;}catch(error){await logout();throw error;}
 }
 export async function restore(){
   try{const saved=sessionStorage.getItem(sessionKey);if(!saved)return null;session=JSON.parse(saved);await getMember();return session?.email||null;}catch{session=null;member=null;sessionStorage.removeItem(sessionKey);return null;}
 }
-export async function logout(){const token=session?.access_token;session=null;member=null;centralCache=null;sessionStorage.removeItem(sessionKey);if(token)await raw('/auth/v1/logout?scope=local',{method:'POST'},token).catch(()=>{});}
+export async function logout(){const token=session?.access_token;session=null;member=null;centralCache=null;staffCache=null;sessionStorage.removeItem(sessionKey);if(token)await raw('/auth/v1/logout?scope=local',{method:'POST'},token).catch(()=>{});}
 async function centralStatus(shop:string):Promise<CentralStatus|null>{
   try{return (await request<CentralStatus[]>(`/rest/v1/inventory_central?shop_id=eq.${shop}&select=active,generation,revision,manifest,device_status,synced_at`))[0]||null;}
   catch(error){if((error as {status?:number}).status===404)return null;throw error;}
@@ -102,7 +103,15 @@ async function centralSnapshot(shop:string,status:CentralStatus):Promise<Snapsho
 }
 export async function loadOffice():Promise<OfficeData>{
   const m=member||await getMember();
-  if(m.role!=='owner'){const data=await staffCall<OfficeData&{role:string}>({action:'load'});member={...m,role:data.role};return data;}
+  if(m.role!=='owner'){
+    type StaffReply=OfficeData&{role:string;unchanged?:boolean};
+    const load=()=>staffCall<StaffReply>({action:'load',generation:staffCache?.generation,revision:staffCache?.revision});
+    let data=await load();
+    if(data.unchanged&&!staffCache){data=await staffCall<StaffReply>({action:'load'});}
+    member={...m,role:data.role};
+    if(data.unchanged&&staffCache){staffCache={...staffCache,snapshotAt:data.snapshotAt,requests:data.requests,devices:data.devices,generation:data.generation,revision:data.revision};return staffCache;}
+    staffCache=data;return data;
+  }
   let central=await centralStatus(m.shop_id);
   if(central?.active){
     let snapshot:Snapshot;
@@ -112,7 +121,7 @@ export async function loadOffice():Promise<OfficeData>{
       central=latest;snapshot=await centralSnapshot(m.shop_id,central);
     }
     const requests=await request<InventoryRequest[]>(`/rest/v1/inventory_central_requests?shop_id=eq.${m.shop_id}&order=created_at.desc,id.desc&limit=1000&select=id,type,payload,status,message,created_at,completed_at`);
-    return {snapshot,snapshotAt:central.synced_at,requests,source:'serverjj',devices:central.device_status||[]};
+    return {snapshot,snapshotAt:central.synced_at,requests,source:'serverjj',devices:central.device_status||[],generation:central.generation,revision:Number(central.revision)};
   }
   const [snapshots,requests]=await Promise.all([request<{snapshot:Snapshot;synced_at:string}[]>(`/rest/v1/inventory_snapshots?shop_id=eq.${m.shop_id}&select=snapshot,synced_at`),request<InventoryRequest[]>(`/rest/v1/inventory_requests?shop_id=eq.${m.shop_id}&order=created_at.desc,id.desc&limit=1000&select=id,type,payload,status,message,created_at,completed_at`)]);
   return {snapshot:snapshots[0]?.snapshot||null,snapshotAt:snapshots[0]?.synced_at||null,requests,source:'pos',devices:[]};

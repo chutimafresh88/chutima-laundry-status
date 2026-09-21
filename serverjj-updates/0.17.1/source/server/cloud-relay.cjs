@@ -4,7 +4,7 @@ const {WebCommands}=require('./web-commands.cjs');
 const CLOUD_URL='https://dgvdwdmaxvtfnjiiixcm.supabase.co';
 const PUBLIC_KEY='sb_publishable_36A6PC0czqhUSzvnI0HgfQ_FIPc4YUK';
 class CloudRelay{
- constructor({engine,fetchImpl=fetch}){this.engine=engine;this.web=new WebCommands(engine);this.fetch=fetchImpl;this.config=null;this.running=null;this.registering=null;this.last={configured:false,active:false,lastSyncAt:null,error:null};}
+ constructor({engine,fetchImpl=fetch}){this.engine=engine;this.web=new WebCommands(engine);this.fetch=fetchImpl;this.config=null;this.running=null;this.registering=null;this.started=false;this.nextPollMs=60000;this.last={configured:false,active:false,lastSyncAt:null,error:null};}
  async init(){
   await this.engine.transaction(async db=>{
    let row=(await db.query('SELECT body FROM chutima.cloud_config WHERE id=1')).rows[0];
@@ -44,6 +44,7 @@ class CloudRelay{
    const devices=rows.map(d=>({id:d.id,label:d.label,pending:Number(d.reported_pending),online:!!d.last_seen&&Date.now()-new Date(d.last_seen).getTime()<30000}));
    const remote=await this.request('exchange',{devices}),results=[];
    if(!Number.isSafeInteger(remote.revision)||remote.revision<0||!Array.isArray(remote.commands)||remote.commands.length>50)throw Error('ข้อมูลตอบกลับจากเว็บไม่ถูกต้อง');
+   this.nextPollMs=Number(remote.pollAfterMs)===10000?10000:60000;
    const before=await this.web.snapshot();
    if(!before){this.last.error='รอ POS หลักนำข้อมูลร้านเข้า SERVERJJ';return this.status();}
    if(before.revision<remote.revision)throw Error('ข้อมูล SERVERJJ เก่ากว่าเว็บ ต้องตรวจข้อมูลกู้คืนก่อนซิงค์ต่อ');
@@ -52,10 +53,11 @@ class CloudRelay{
    await this.publish(snapshot,remote);
    for(const r of results)await this.request('result',{id:r.id,status:r.status,message:r.message});
    this.last={configured:true,active:true,lastSyncAt:new Date().toISOString(),error:null};
-  }catch(error){this.last.error=/[ก-๙]/.test(error.message)?error.message:'ติดต่อเว็บไม่ได้ SERVERJJ และ POS ยังทำงานในร้านได้';}
+  }catch(error){this.nextPollMs=60000;this.last.error=/[ก-๙]/.test(error.message)?error.message:'ติดต่อเว็บไม่ได้ SERVERJJ และ POS ยังทำงานในร้านได้';}
   return this.status();})().finally(()=>{this.running=null;});return this.running;
  }
- start(){this.timer=setInterval(()=>this.tick(),10000);this.timer.unref?.();this.tick();}
- stop(){clearInterval(this.timer);}
+ schedule(){if(!this.started)return;clearTimeout(this.timer);this.timer=setTimeout(()=>this.tick().finally(()=>this.schedule()),this.nextPollMs);this.timer.unref?.();}
+ start(){if(this.started)return;this.started=true;this.tick().finally(()=>this.schedule());}
+ stop(){this.started=false;clearTimeout(this.timer);}
 }
 module.exports={CloudRelay};

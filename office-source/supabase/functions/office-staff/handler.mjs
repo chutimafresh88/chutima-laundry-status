@@ -48,6 +48,9 @@ export function createHandler({env,fetchImpl=fetch}){return async req=>{
   }
   if(input.action==='load'){
    const c=(await admin('/rest/v1/inventory_central?shop_id=eq.'+shop+'&select=active,generation,revision,manifest,device_status,synced_at'))[0];if(!c?.active||!uuid(c.generation))throw failure(503,'รอ SERVERJJ เชื่อมต่อ');
+   const requests=role==='employee'?[]:await admin('/rest/v1/inventory_central_requests?shop_id=eq.'+shop+'&created_by=eq.'+user.id+'&select=id,type,payload,status,message,created_at,completed_at&order=created_at.desc&limit=1000');
+   const base={role,displayName:staff?.display_name||user.email,snapshotAt:c.synced_at,requests:requests.filter(r=>r.payload?.workflow!=='employee.save'),source:'serverjj',devices:c.device_status||[],generation:c.generation,revision:Number(c.revision)};
+   if(input.generation===c.generation&&Number.isSafeInteger(input.revision)&&input.revision===Number(c.revision))return reply(200,{...base,unchanged:true,snapshot:null});
    const records=[];for(let offset=0;offset<100000;offset+=500){const page=await admin('/rest/v1/inventory_central_rows?shop_id=eq.'+shop+'&generation=eq.'+c.generation+'&select=collection,id,body&order=collection.asc,id.asc&offset='+offset+'&limit=500');records.push(...page);if(page.length<500)break;}
    for(const [collection,count] of Object.entries(c.manifest))if(records.filter(r=>r.collection===collection).length!==Number(count))throw failure(503,'ข้อมูลยังไม่ครบ กรุณาลองใหม่');
    const list=name=>records.filter(r=>r.collection===name).map(r=>r.body),meta=list('meta')[0]||{};let products=list('products');
@@ -56,8 +59,7 @@ export function createHandler({env,fetchImpl=fetch}){return async req=>{
    snapshot.productTrashVersion=meta.productTrashVersion||0;
    snapshot.employeeWorkflowVersion=meta.employeeWorkflowVersion||0;snapshot.vendingWorkflowVersion=meta.vendingWorkflowVersion||0;
    snapshot.vendingMachines=role==='employee'?[]:list('vendingMachines');snapshot.vendingEvents=role==='employee'?[]:list('vendingEvents');
-   const requests=role==='employee'?[]:await admin('/rest/v1/inventory_central_requests?shop_id=eq.'+shop+'&created_by=eq.'+user.id+'&select=id,type,payload,status,message,created_at,completed_at&order=created_at.desc&limit=1000');
-   return reply(200,{role,displayName:staff?.display_name||user.email,snapshot,snapshotAt:c.synced_at,requests:requests.filter(r=>r.payload?.workflow!=='employee.save'),source:'serverjj',devices:c.device_status||[]});
+   return reply(200,{...base,unchanged:false,snapshot});
   }
   throw failure(400,'ไม่รองรับคำขอ');
  }catch(e){return reply(e.status||500,{message:e.status?e.message:'ระบบพนักงานไม่พร้อม กรุณาลองใหม่'});}

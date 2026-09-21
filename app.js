@@ -260,6 +260,8 @@ document.addEventListener('visibilitychange', () => {
 
 configureActions();
 fetchStatus();
-refreshTimer = setInterval(() => fetchStatus(), 30000);
+refreshTimer = setInterval(() => {
+  if (!document.hidden) fetchStatus();
+}, 60000);
 setInterval(updateLastSeen, 1000);
 window.addEventListener('beforeunload', () => clearInterval(refreshTimer));
