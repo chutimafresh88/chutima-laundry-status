@@ -184,9 +184,8 @@ function renderError(kind) {
 
 async function fetchStatus({ announce = false } = {}) {
   const token = queueToken();
-  const supabaseUrl = String(CONFIG.supabaseUrl || '').replace(/\/+$/, '');
-  const publishableKey = String(CONFIG.publishableKey || '');
-  if (!supabaseUrl || !publishableKey) {
+  const serverUrl = String(CONFIG.serverUrl || location.origin).replace(/\/+$/, '');
+  if (!serverUrl) {
     renderError('config');
     elements.notice.hidden = false;
     return;
@@ -200,16 +199,7 @@ async function fetchStatus({ announce = false } = {}) {
   elements.refresh.disabled = true;
   elements.refresh.classList.add('loading');
   try {
-    const response = await fetch(`${supabaseUrl}/rest/v1/rpc/get_public_queue_status`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: publishableKey,
-        Authorization: `Bearer ${publishableKey}`
-      },
-      body: JSON.stringify({ p_token: token }),
-      cache: 'no-store'
-    });
+    const response = await fetch(`${serverUrl}/api/queue?token=${encodeURIComponent(token)}`, {cache:'no-store',signal:AbortSignal.timeout(15000)});
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const payload = await response.json();
     if (!payload) {
@@ -265,3 +255,4 @@ refreshTimer = setInterval(() => {
 }, 60000);
 setInterval(updateLastSeen, 1000);
 window.addEventListener('beforeunload', () => clearInterval(refreshTimer));
+
